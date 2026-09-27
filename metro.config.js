@@ -1,9 +1,8 @@
 const { getDefaultConfig } = require("expo/metro-config");
-const { withNativeWind } = require("nativewind/metro");
 
 const config = getDefaultConfig(__dirname);
 
-// ✅ Enable SVG support
+// SVG support
 config.transformer.babelTransformerPath = require.resolve(
   "react-native-svg-transformer"
 );
@@ -13,8 +12,4 @@ config.resolver.assetExts = config.resolver.assetExts.filter(
 
 config.resolver.sourceExts.push("svg");
 
-// ✅ Keep NativeWind setup
-module.exports = withNativeWind(config, {
-  input: "./global.css",
-  inlineRem: 16,
-});
+module.exports = config;

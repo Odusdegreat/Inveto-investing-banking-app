@@ -1,189 +1,177 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { useRouter, useSegments } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { TouchableOpacity, View } from "react-native";
+import type { BottomTabBarProps } from "expo-router/js-tabs";
+import React from "react";
+import { Pressable, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
 
-export default function BottomNav() {
-  const router = useRouter();
-  const segments = useSegments();
-  const [activeRoute, setActiveRoute] = useState("/home");
+import { useTheme } from "@/src/theme/ThemeProvider";
 
-  const tabs = [
-    {
-      route: "/home",
-      icon: "home-outline",
-      iconSet: "ionicons",
-      label: "Dashboard",
-    },
-    {
-      route: "/investing",
-      icon: "credit-card",
-      iconSet: "feather",
-      label: "Wallet",
-    },
-    {
-      route: "/dashboard",
-      icon: "grid-outline",
-      iconSet: "ionicons",
-      label: "Assets",
-    },
-    {
-      route: "/notification",
-      icon: "notifications-outline",
-      iconSet: "ionicons",
-      label: "Notifications",
-    },
-    {
-      route: "/user",
-      icon: "user",
-      iconSet: "feather",
-      label: "Profile",
-    },
-  ];
+type Tab = {
+  route: string;
+  ionicon: React.ComponentProps<typeof Ionicons>["name"];
+  feather: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+};
 
-  useEffect(() => {
-    const current = "/" + segments.join("/");
-    const matchedTab = tabs.find(
-      (tab) => current.toLowerCase() === tab.route.toLowerCase()
-    );
-    setActiveRoute(matchedTab ? matchedTab.route : "/home");
-  }, [segments]);
+const TABS: Tab[] = [
+  { route: "home", ionicon: "home-outline", feather: "home", label: "Home" },
+  {
+    route: "investing",
+    ionicon: "trending-up-outline",
+    feather: "trending-up",
+    label: "Invest",
+  },
+  {
+    route: "dashboard",
+    ionicon: "grid-outline",
+    feather: "grid",
+    label: "Assets",
+  },
+  {
+    route: "notification",
+    ionicon: "notifications-outline",
+    feather: "bell",
+    label: "Alerts",
+  },
+  { route: "user", ionicon: "person-outline", feather: "user", label: "Profile" },
+];
 
-  const handlePress = (route: string) => {
-    setActiveRoute(route);
-    router.push(route as any);
+export default function BottomNav({
+  state,
+  navigation,
+  insets,
+}: BottomTabBarProps) {
+  const { colors, radii } = useTheme();
+  const activeRoute = state?.routes[state.index]?.name ?? state?.routes[0]?.name;
+
+  const handlePress = (name: string) => {
+    const route = state.routes.find((item) => item.name === name);
+    if (!route) return;
+
+    const event = navigation.emit({
+      type: "tabPress",
+      target: route.key,
+      canPreventDefault: true,
+    });
+
+    if (activeRoute !== name && !event.defaultPrevented) {
+      navigation.navigate(route.name, route.params);
+    }
   };
 
-  const iconColor = (route: string) =>
-    activeRoute === route ? "#22C55E" : "white";
-  const textColor = (route: string) =>
-    activeRoute === route ? "#22C55E" : "#CBD5E1";
-
   return (
-    <View className="flex-row justify-around items-center bg-white/10 py-3 rounded-3xl mx-5 mb-5">
-      {tabs.map((tab) => {
-        const isActive = activeRoute === tab.route;
-
-        return (
+    <View
+      style={{
+        backgroundColor: colors.background,
+        paddingBottom: Math.max(insets.bottom, 16),
+        paddingTop: 8,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-around",
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: radii.xl,
+          marginHorizontal: 16,
+          paddingVertical: 10,
+        }}
+      >
+        {TABS.map((tab) => (
           <TabItem
             key={tab.route}
             tab={tab}
-            isActive={isActive}
+            active={activeRoute === tab.route}
             onPress={() => handlePress(tab.route)}
-            iconColor={iconColor(tab.route)}
-            textColor={textColor(tab.route)}
           />
-        );
-      })}
+        ))}
+      </View>
     </View>
   );
 }
 
-// Separate component for each tab item with proper types
-interface TabItemProps {
-  tab: {
-    route: string;
-    icon: string;
-    iconSet: string;
-    label: string;
-  };
-  isActive: boolean;
-  onPress: () => void;
-  iconColor: string;
-  textColor: string;
-}
-
 function TabItem({
   tab,
-  isActive,
+  active,
   onPress,
-  iconColor,
-  textColor,
-}: TabItemProps) {
-  // Pulse animation for glow - always animate, but control visibility
+}: {
+  tab: Tab;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  const tint = active ? colors.accent : colors.textSubtle;
+
   const pulseStyle = useAnimatedStyle(() => {
-    if (!isActive) {
-      return {
-        transform: [{ scale: 1 }],
-        opacity: 0,
-      };
-    }
+    if (!active) return { transform: [{ scale: 1 }], opacity: 0 };
     return {
       transform: [
-        { scale: withRepeat(withTiming(1.8, { duration: 1200 }), -1, false) },
+        { scale: withRepeat(withTiming(1.9, { duration: 1400 }), -1, false) },
       ],
-      opacity: withRepeat(withTiming(0, { duration: 1200 }), -1, false),
+      opacity: withRepeat(withTiming(0, { duration: 1400 }), -1, false),
     };
-  }, [isActive]);
+  }, [active]);
 
-  // Icon animation
-  const iconStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: withTiming(isActive ? 1.2 : 1, { duration: 200 }) }],
-      opacity: withTiming(isActive ? 1 : 0.6, { duration: 200 }),
-    };
-  }, [isActive]);
+  const iconStyle = useAnimatedStyle(
+    () => ({
+      transform: [{ scale: withTiming(active ? 1.15 : 1, { duration: 180 }) }],
+    }),
+    [active],
+  );
 
-  // Label animation
-  const labelStyle = useAnimatedStyle(() => {
-    return {
-      opacity: withTiming(isActive ? 1 : 0.7, { duration: 200 }),
+  const labelStyle = useAnimatedStyle(
+    () => ({
+      opacity: withTiming(active ? 1 : 0.7, { duration: 180 }),
       transform: [
-        { scale: withTiming(isActive ? 1.05 : 1, { duration: 200 }) },
+        { scale: withTiming(active ? 1.03 : 1, { duration: 180 }) },
       ],
-    };
-  }, [isActive]);
+    }),
+    [active],
+  );
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      activeOpacity={0.8}
-      className="items-center justify-center"
+      accessibilityRole="tab"
+      accessibilityLabel={tab.label}
+      accessibilityState={{ selected: active }}
+      hitSlop={8}
+      style={{ alignItems: "center", justifyContent: "center", flex: 1, gap: 3 }}
     >
-      <View className="relative items-center justify-center">
-        {/* Pulse Glow Effect */}
+      <View style={{ alignItems: "center", justifyContent: "center" }}>
         <Animated.View
+          pointerEvents="none"
           style={[
             pulseStyle,
             {
               position: "absolute",
-              width: 32,
-              height: 32,
-              borderRadius: 20,
-              backgroundColor: "#22C55E",
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              backgroundColor: colors.accent,
             },
           ]}
         />
-
-        {/* Animated Icon */}
         <Animated.View style={iconStyle}>
-          {tab.iconSet === "ionicons" ? (
-            <Ionicons name={tab.icon as any} size={22} color={iconColor} />
-          ) : (
-            <Feather name={tab.icon as any} size={22} color={iconColor} />
-          )}
+          <Ionicons name={tab.ionicon} size={21} color={tint} />
         </Animated.View>
       </View>
 
-      {/* Animated Label */}
       <Animated.Text
         style={[
           labelStyle,
-          {
-            color: textColor,
-            fontSize: 12,
-            fontWeight: "600",
-            marginTop: 4,
-          },
+          { color: tint, fontSize: 10.5, fontWeight: active ? "800" : "600" },
         ]}
       >
         {tab.label}
       </Animated.Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }

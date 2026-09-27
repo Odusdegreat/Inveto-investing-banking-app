@@ -1,4 +1,4 @@
-import SecuritySettingsScreen from "./screens/SecuritySettingsScreen";
+import SecuritySettingsScreen from "@/src/screens/SecuritySettingsScreen";
 
 export default function SecuritySettings() {
   return <SecuritySettingsScreen />;
