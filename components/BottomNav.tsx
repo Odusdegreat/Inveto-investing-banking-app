@@ -1,13 +1,15 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
-import React from "react";
-import { Pressable, View } from "react-native";
+import React, { useEffect } from "react";
+import { Pressable, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
 
+import { api } from "@/src/api/client";
+import { useNotificationStore } from "@/src/store/notifications";
 import { useTheme } from "@/src/theme/ThemeProvider";
 
 type Tab = {
@@ -47,6 +49,15 @@ export default function BottomNav({
 }: BottomTabBarProps) {
   const { colors, radii } = useTheme();
   const activeRoute = state?.routes[state.index]?.name ?? state?.routes[0]?.name;
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.notifications.unreadCount()
+      .then((count) => { if (!cancelled) useNotificationStore.getState().setUnreadCount(count); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const handlePress = (name: string) => {
     const route = state.routes.find((item) => item.name === name);
@@ -84,14 +95,15 @@ export default function BottomNav({
           paddingVertical: 10,
         }}
       >
-        {TABS.map((tab) => (
-          <TabItem
-            key={tab.route}
-            tab={tab}
-            active={activeRoute === tab.route}
-            onPress={() => handlePress(tab.route)}
-          />
-        ))}
+{TABS.map((tab) => (
+            <TabItem
+              key={tab.route}
+              tab={tab}
+              active={activeRoute === tab.route}
+              unreadCount={tab.route === "notification" ? unreadCount : 0}
+              onPress={() => handlePress(tab.route)}
+            />
+          ))}
       </View>
     </View>
   );
@@ -100,14 +112,17 @@ export default function BottomNav({
 function TabItem({
   tab,
   active,
+  unreadCount = 0,
   onPress,
 }: {
   tab: Tab;
   active: boolean;
+  unreadCount?: number;
   onPress: () => void;
 }) {
   const { colors } = useTheme();
   const tint = active ? colors.accent : colors.textSubtle;
+  const showBadge = unreadCount > 0;
 
   const pulseStyle = useAnimatedStyle(() => {
     if (!active) return { transform: [{ scale: 1 }], opacity: 0 };
@@ -145,12 +160,12 @@ function TabItem({
       hitSlop={8}
       style={{ alignItems: "center", justifyContent: "center", flex: 1, gap: 3 }}
     >
-      <View style={{ alignItems: "center", justifyContent: "center" }}>
+      <View style={{ alignItems: "center", justifyContent: "center", position: "relative" }}>
         <Animated.View
-          pointerEvents="none"
           style={[
             pulseStyle,
             {
+              pointerEvents: "none",
               position: "absolute",
               width: 30,
               height: 30,
@@ -162,6 +177,26 @@ function TabItem({
         <Animated.View style={iconStyle}>
           <Ionicons name={tab.ionicon} size={21} color={tint} />
         </Animated.View>
+        {showBadge && (
+          <View
+            style={{
+              position: "absolute",
+              top: -4,
+              right: -4,
+              minWidth: 18,
+              height: 18,
+              borderRadius: 9,
+              backgroundColor: colors.danger,
+              justifyContent: "center",
+              alignItems: "center",
+              paddingHorizontal: 4,
+            }}
+          >
+            <Text style={{ color: "white", fontSize: 10, fontWeight: "800" }}>
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </Text>
+          </View>
+        )}
       </View>
 
       <Animated.Text

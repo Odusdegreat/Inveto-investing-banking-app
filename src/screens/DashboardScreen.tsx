@@ -1,10 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
-import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
+import { Text, View, type LayoutChangeEvent, type ViewStyle } from "react-native";
 import Svg, { Circle, Line, Path } from "react-native-svg";
 
 import { api } from "@/src/api/client";
-import { Card, EmptyState, Screen, SectionHeader, Skeleton } from "@/src/components/ui";
+import {
+  Card,
+  Divider,
+  EmptyState,
+  Screen,
+  Section,
+  SegmentedTabs,
+  Skeleton,
+} from "@/src/components/ui";
 import { useApi } from "@/src/hooks/useApi";
 import { DEFAULT_CURRENCY } from "@/src/lib/currency";
 import {
@@ -216,6 +224,7 @@ export default function DashboardScreen() {
 
   return (
     <Screen
+      gap={22}
       refreshing={accounts.refreshing || transactions.refreshing}
       onRefresh={() => {
         setToday(startOfDay(Date.now()));
@@ -225,58 +234,37 @@ export default function DashboardScreen() {
         void products.reload();
       }}
     >
-      <Text
-        style={{
-          color: colors.textSubtle,
-          fontSize: 12,
-          fontWeight: "600",
-          letterSpacing: 0.6,
-          textTransform: "uppercase",
-        }}
-      >
-        {monthLabel}
-      </Text>
-      <Text
-        style={{
-          color: colors.textMuted,
-          fontSize: 13,
-          marginTop: 2,
-        }}
-      >
-        Overview
-      </Text>
+      <View style={styles.pageHead}>
+        <Text style={{ color: colors.textMuted, fontSize: 14, fontWeight: "600" }}>
+          Overview
+        </Text>
+        <Text style={{ color: colors.text, fontSize: 26, fontWeight: "800" }}>
+          {monthLabel}
+        </Text>
+      </View>
 
-      <View style={{ height: 18 }} />
-
-      <Card style={{ padding: 18 }}>
-        <Text style={{ color: colors.textSubtle, fontSize: 12 }}>
+      <Card style={styles.headlineCard}>
+        <Text style={{ color: colors.textSubtle, fontSize: 13 }}>
           {tab === "assets" ? "Total net worth" : tab === "spending" ? "Spent this week" : "Received this week"}
         </Text>
         {loading ? (
-          <Skeleton height={30} width="60%" />
+          <Skeleton height={34} width="60%" />
         ) : (
-          <Text
-            style={{
-              color: colors.text,
-              fontSize: 32,
-              fontWeight: "800",
-              marginTop: 4,
-            }}
-          >
+          <Text style={{ color: colors.text, fontSize: 34, fontWeight: "800" }}>
             {formatMoney(headline, currency)}
           </Text>
         )}
 
         {tab === "assets" ? (
-          <View style={{ flexDirection: "row", gap: 20, marginTop: 12 }}>
-            <View>
-              <Text style={{ color: colors.textSubtle, fontSize: 11 }}>Cash</Text>
+          <View style={styles.splitRow}>
+            <View style={styles.split}>
+              <Text style={{ color: colors.textSubtle, fontSize: 12 }}>Cash</Text>
               <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>
                 {formatMoney(cashTotal, currency, { compact: true })}
               </Text>
             </View>
-            <View>
-              <Text style={{ color: colors.textSubtle, fontSize: 11 }}>Invested</Text>
+            <View style={styles.split}>
+              <Text style={{ color: colors.textSubtle, fontSize: 12 }}>Invested</Text>
               <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>
                 {formatMoney(portfolioValue, currency, { compact: true })}
               </Text>
@@ -285,280 +273,302 @@ export default function DashboardScreen() {
         ) : null}
       </Card>
 
-      <View style={{ height: 16 }} />
+      <SegmentedTabs options={TABS} value={tab} onChange={setTab} />
 
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        {TABS.map((option) => {
-          const active = tab === option.key;
-          return (
-            <Pressable
-              key={option.key}
-              onPress={() => setTab(option.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`${option.label} view`}
-              style={{
-                flex: 1,
-                alignItems: "center",
-                paddingVertical: 10,
-                borderRadius: radii.pill,
-                borderWidth: 1,
-                borderColor: active ? colors.accent : colors.border,
-                backgroundColor: active ? colors.accentSoft : "transparent",
-              }}
-            >
+      <Section title="Last 7 days" gap={14}>
+        <Card style={styles.chartCard}>
+          <View style={styles.chart} onLayout={onChartLayout}>
+            {chart ? (
+              <Svg height={CHART_HEIGHT} width={chartWidth}>
+                <Line
+                  x1={0}
+                  y1={chart.baseline}
+                  x2={chartWidth}
+                  y2={chart.baseline}
+                  stroke={colors.border}
+                  strokeWidth={1}
+                />
+                <Path d={chart.area} fill={colors.accentSoft} />
+                <Path
+                  d={chart.line}
+                  stroke={colors.accent}
+                  strokeWidth={2}
+                  fill="none"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+                {chart.points.map((point, index) => (
+                  <Circle
+                    key={week[index].start}
+                    cx={point.x}
+                    cy={point.y}
+                    r={3.5}
+                    fill={colors.accent}
+                  />
+                ))}
+              </Svg>
+            ) : null}
+          </View>
+
+          <View style={styles.dayLabels}>
+            {week.map((day) => (
+              <Text
+                key={day.start}
+                style={{ color: colors.textSubtle, fontSize: 12, fontWeight: "600" }}
+              >
+                {day.label}
+              </Text>
+            ))}
+          </View>
+
+          <Divider style={styles.chartDivider} />
+
+          <View style={styles.splitRow}>
+            <View style={styles.split}>
+              <Text style={{ color: colors.textSubtle, fontSize: 12 }}>In</Text>
+              <Text style={{ color: colors.success, fontSize: 16, fontWeight: "800" }}>
+                {formatMoney(weekIn, currency, { compact: true })}
+              </Text>
+            </View>
+            <View style={styles.split}>
+              <Text style={{ color: colors.textSubtle, fontSize: 12 }}>Out</Text>
+              <Text style={{ color: colors.danger, fontSize: 16, fontWeight: "800" }}>
+                {formatMoney(weekOut, currency, { compact: true })}
+              </Text>
+            </View>
+            <View style={styles.split}>
+              <Text style={{ color: colors.textSubtle, fontSize: 12 }}>Net</Text>
               <Text
                 style={{
-                  color: active ? colors.accent : colors.textMuted,
-                  fontSize: 13,
-                  fontWeight: "700",
+                  color: weekNet >= 0 ? colors.success : colors.danger,
+                  fontSize: 16,
+                  fontWeight: "800",
                 }}
               >
-                {option.label}
+                {formatMoney(weekNet, currency, { compact: true, sign: true })}
               </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={{ height: 20 }} />
-
-      <SectionHeader title="Last 7 days" />
-      <Card style={{ padding: 16 }}>
-        <View style={{ height: CHART_HEIGHT }} onLayout={onChartLayout}>
-          {chart ? (
-            <Svg height={CHART_HEIGHT} width={chartWidth}>
-              <Line
-                x1={0}
-                y1={chart.baseline}
-                x2={chartWidth}
-                y2={chart.baseline}
-                stroke={colors.border}
-                strokeWidth={1}
-              />
-              <Path d={chart.area} fill={colors.accentSoft} />
-              <Path
-                d={chart.line}
-                stroke={colors.accent}
-                strokeWidth={2}
-                fill="none"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-              {chart.points.map((point, index) => (
-                <Circle
-                  key={week[index].start}
-                  cx={point.x}
-                  cy={point.y}
-                  r={3.5}
-                  fill={colors.accent}
-                />
-              ))}
-            </Svg>
-          ) : null}
-        </View>
-
-        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
-          {week.map((day) => (
-            <Text
-              key={day.start}
-              style={{ color: colors.textSubtle, fontSize: 11, fontWeight: "600" }}
-            >
-              {day.label}
-            </Text>
-          ))}
-        </View>
-
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            marginTop: 14,
-            paddingTop: 14,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-          }}
-        >
-          <View>
-            <Text style={{ color: colors.textSubtle, fontSize: 11 }}>In</Text>
-            <Text style={{ color: colors.success, fontSize: 15, fontWeight: "700" }}>
-              {formatMoney(weekIn, currency, { compact: true })}
-            </Text>
+            </View>
           </View>
-          <View>
-            <Text style={{ color: colors.textSubtle, fontSize: 11 }}>Out</Text>
-            <Text style={{ color: colors.danger, fontSize: 15, fontWeight: "700" }}>
-              {formatMoney(weekOut, currency, { compact: true })}
-            </Text>
-          </View>
-          <View>
-            <Text style={{ color: colors.textSubtle, fontSize: 11 }}>Net</Text>
-            <Text
-              style={{
-                color: weekNet >= 0 ? colors.success : colors.danger,
-                fontSize: 15,
-                fontWeight: "700",
-              }}
-            >
-              {formatMoney(weekNet, currency, { compact: true, sign: true })}
-            </Text>
-          </View>
-        </View>
-      </Card>
+        </Card>
+      </Section>
 
-      <View style={{ height: 20 }} />
-
-      <SectionHeader
+      <Section
         title={tab === "assets" ? "Holdings" : tab === "spending" ? "Recent spending" : "Recent income"}
-      />
-      {loading ? (
-        <Card style={{ padding: 16, gap: 12 }}>
-          <Skeleton height={18} />
-          <Skeleton height={18} />
-          <Skeleton height={18} />
-        </Card>
-      ) : rows.length === 0 ? (
-        <Card style={{ padding: 16 }}>
-          <EmptyState
-            icon={tab === "assets" ? "wallet-outline" : "receipt-outline"}
-            title={
-              tab === "assets"
-                ? "No accounts yet"
-                : tab === "spending"
-                  ? "Nothing spent yet"
-                  : "No income yet"
-            }
-            message={
-              tab === "assets"
-                ? "Open an account to start tracking your money here."
-                : "Transactions in this category will show up here."
-            }
-          />
-        </Card>
-      ) : (
-        <Card style={{ paddingVertical: 4 }}>
-          {rows.map((row, index) => (
-            <View key={`${row.label}-${index}`}>
-              {index > 0 ? <View style={{ height: 1, backgroundColor: colors.border }} /> : null}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  paddingVertical: 13,
-                  paddingHorizontal: 14,
-                  gap: 12,
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontSize: 14, fontWeight: "600" }} numberOfLines={1}>
-                    {row.label}
-                  </Text>
-                  <Text style={{ color: colors.textSubtle, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
-                    {row.sub}
+        gap={12}
+      >
+        {loading ? (
+          <Card style={{ padding: 20, gap: 16 }}>
+            <Skeleton height={18} />
+            <Skeleton height={18} />
+            <Skeleton height={18} />
+          </Card>
+        ) : rows.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={tab === "assets" ? "wallet-outline" : "receipt-outline"}
+              title={
+                tab === "assets"
+                  ? "No accounts yet"
+                  : tab === "spending"
+                    ? "Nothing spent yet"
+                    : "No income yet"
+              }
+              message={
+                tab === "assets"
+                  ? "Open an account to start tracking your money here."
+                  : "Transactions in this category will show up here."
+              }
+            />
+          </Card>
+        ) : (
+          <Card style={{ paddingVertical: 6 }}>
+            {rows.map((row, index) => (
+              <View key={`${row.label}-${index}`}>
+                {index > 0 ? <Divider /> : null}
+                <View style={styles.breakdownRow}>
+                  <View style={styles.split}>
+                    <Text
+                      numberOfLines={1}
+                      style={{ color: colors.text, fontSize: 15, fontWeight: "600" }}
+                    >
+                      {row.label}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={{ color: colors.textSubtle, fontSize: 13 }}
+                    >
+                      {row.sub}
+                    </Text>
+                  </View>
+                  <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>
+                    {tab === "spending"
+                      ? formatMoney(-row.value, currency)
+                      : formatMoney(row.value, currency)}
                   </Text>
                 </View>
-                <Text
-                  style={{
-                    color: colors.text,
-                    fontSize: 15,
-                    fontWeight: "700",
-                  }}
-                >
-                  {tab === "spending"
-                    ? formatMoney(-row.value, currency)
-                    : formatMoney(row.value, currency)}
-                </Text>
               </View>
+            ))}
+          </Card>
+        )}
+      </Section>
+
+      <Section title="This month" gap={14}>
+        <Card style={styles.monthCard}>
+          <View style={styles.splitRow}>
+            <View style={styles.split}>
+              <Text style={{ color: colors.textSubtle, fontSize: 12 }}>In</Text>
+              <Text style={{ color: colors.success, fontSize: 17, fontWeight: "800" }}>
+                {formatMoney(month.inflow, currency, { compact: true })}
+              </Text>
             </View>
-          ))}
-        </Card>
-      )}
-
-      <View style={{ height: 20 }} />
-
-      <SectionHeader title={`This month`} />
-      <Card style={{ padding: 16 }}>
-        <View style={{ flexDirection: "row", gap: 16 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.textSubtle, fontSize: 11 }}>In</Text>
-            <Text style={{ color: colors.success, fontSize: 16, fontWeight: "800", marginTop: 2 }}>
-              {formatMoney(month.inflow, currency, { compact: true })}
-            </Text>
+            <View style={styles.split}>
+              <Text style={{ color: colors.textSubtle, fontSize: 12 }}>Out</Text>
+              <Text style={{ color: colors.danger, fontSize: 17, fontWeight: "800" }}>
+                {formatMoney(month.outflow, currency, { compact: true })}
+              </Text>
+            </View>
+            <View style={styles.split}>
+              <Text style={{ color: colors.textSubtle, fontSize: 12 }}>Net</Text>
+              <Text
+                style={{
+                  color: month.net >= 0 ? colors.success : colors.danger,
+                  fontSize: 17,
+                  fontWeight: "800",
+                }}
+              >
+                {formatMoney(month.net, currency, { compact: true, sign: true })}
+              </Text>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.textSubtle, fontSize: 11 }}>Out</Text>
-            <Text style={{ color: colors.danger, fontSize: 16, fontWeight: "800", marginTop: 2 }}>
-              {formatMoney(month.outflow, currency, { compact: true })}
-            </Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.textSubtle, fontSize: 11 }}>Net</Text>
-            <Text
-              style={{
-                color: month.net >= 0 ? colors.success : colors.danger,
-                fontSize: 16,
-                fontWeight: "800",
-                marginTop: 2,
-              }}
-            >
-              {formatMoney(month.net, currency, { compact: true, sign: true })}
-            </Text>
-          </View>
-        </View>
 
-        {month.top.length > 0 ? (
-          <View style={{ marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.border }}>
-            <Text style={{ color: colors.textSubtle, fontSize: 11, marginBottom: 10 }}>
-              Top spending categories
-            </Text>
-            {month.top
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 3)
-              .map(([category, value]) => {
-                const share = month.outflow > 0 ? value / month.outflow : 0;
-                return (
-                  <View key={category} style={{ marginBottom: 10 }}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                      <Text style={{ color: colors.text, fontSize: 13, fontWeight: "600" }}>
-                        {CATEGORY_LABEL[category as keyof typeof CATEGORY_LABEL]}
-                      </Text>
-                      <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                        {formatMoney(value, currency, { compact: true })}
-                      </Text>
-                    </View>
-                    <View
-                      style={{
-                        height: 6,
-                        borderRadius: 3,
-                        backgroundColor: colors.surfaceSunken,
-                        marginTop: 6,
-                        overflow: "hidden",
-                      }}
-                    >
+          {month.top.length > 0 ? (
+          <View
+            style={[
+              styles.categories,
+              { borderTopColor: colors.border },
+            ]}
+          >
+            <Text style={{ color: colors.textSubtle, fontSize: 12 }}>
+                Top spending categories
+              </Text>
+              {month.top
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 3)
+                .map(([category, value]) => {
+                  const share = month.outflow > 0 ? value / month.outflow : 0;
+                  return (
+                    <View key={category} style={styles.categoryRow}>
+                      <View style={styles.categoryHead}>
+                        <Text style={{ color: colors.text, fontSize: 14, fontWeight: "600" }}>
+                          {CATEGORY_LABEL[category as keyof typeof CATEGORY_LABEL]}
+                        </Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 14 }}>
+                          {formatMoney(value, currency, { compact: true })}
+                        </Text>
+                      </View>
                       <View
-                        style={{
-                          width: `${Math.max(share * 100, 2)}%`,
-                          height: "100%",
-                          backgroundColor: colors.accent,
-                        }}
-                      />
+                        style={[
+                          styles.categoryTrack,
+                          { borderRadius: radii.pill, backgroundColor: colors.surfaceSunken },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.categoryFill,
+                            {
+                              width: `${Math.max(share * 100, 2)}%`,
+                              borderRadius: radii.pill,
+                              backgroundColor: colors.accent,
+                            },
+                          ]}
+                        />
+                      </View>
                     </View>
-                  </View>
-                );
-              })}
-          </View>
-        ) : null}
-      </Card>
+                  );
+                })}
+            </View>
+          ) : null}
+        </Card>
+      </Section>
 
-      <View style={{ height: 12 }} />
-
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center" }}>
-        <Ionicons name="information-circle-outline" size={13} color={colors.textSubtle} />
-        <Text style={{ color: colors.textSubtle, fontSize: 11 }}>
+      <View style={styles.footnote}>
+        <Ionicons name="information-circle-outline" size={14} color={colors.textSubtle} />
+        <Text style={{ color: colors.textSubtle, fontSize: 12 }}>
           Figures exclude reversed and failed transactions.
         </Text>
       </View>
     </Screen>
   );
 }
+
+const styles = {
+  pageHead: {
+    gap: 4,
+  },
+  headlineCard: {
+    padding: 20,
+    gap: 6,
+  },
+  splitRow: {
+    flexDirection: "row",
+    gap: 20,
+    marginTop: 14,
+  },
+  split: {
+    flex: 1,
+    gap: 3,
+  },
+  chartCard: {
+    padding: 18,
+  },
+  chart: {
+    height: CHART_HEIGHT,
+  },
+  dayLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
+  chartDivider: {
+    marginVertical: 16,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 12,
+  },
+  monthCard: {
+    padding: 18,
+  },
+  categories: {
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    gap: 4,
+  },
+  categoryRow: {
+    gap: 8,
+    marginTop: 12,
+  },
+  categoryHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  categoryTrack: {
+    height: 7,
+    overflow: "hidden",
+  },
+  categoryFill: {
+    height: 7,
+  },
+  footnote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    justifyContent: "center",
+  },
+} satisfies Record<string, ViewStyle>;

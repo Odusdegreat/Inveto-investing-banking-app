@@ -593,6 +593,10 @@ export const seedSecurity: SecurityState = {
   autoLockSeconds: 300,
   transactionAlerts: true,
   loginAlerts: true,
+  emailTransactionAlerts: true,
+  emailLoginAlerts: true,
+  emailSecurityAlerts: true,
+  emailMarketing: false,
 };
 
 export { ahead };

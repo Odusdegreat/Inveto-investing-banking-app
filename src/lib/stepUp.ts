@@ -1,3 +1,4 @@
+import type { StepUpAction } from "@/src/api/client";
 import { router } from "expo-router";
 
 /**
@@ -15,6 +16,7 @@ import { router } from "expo-router";
 type Pending = {
   resolve: (token: string | null) => void;
   reason: string;
+  action: StepUpAction;
 };
 
 let pending: Pending | null = null;
@@ -23,13 +25,13 @@ let pending: Pending | null = null;
  * Pushes the PIN screen and resolves with a single-use step-up token, or `null`
  * if the user cancelled, went back, or failed verification.
  */
-export function confirmStepUp(reason: string): Promise<string | null> {
+export function confirmStepUp(action: StepUpAction, reason: string): Promise<string | null> {
   // The confirmation screen is modal, so two requests cannot legitimately
   // overlap. Fail the newcomer rather than stacking screens.
   if (pending) return Promise.resolve(null);
 
   return new Promise<string | null>((resolve) => {
-    pending = { resolve, reason };
+    pending = { resolve, reason, action };
     router.push({ pathname: "/pin", params: { reason } });
   });
 }
@@ -51,3 +53,5 @@ export function cancelStepUp() {
 export function hasPendingStepUp() {
   return pending !== null;
 }
+
+export function pendingStepUpAction() { return pending?.action; }

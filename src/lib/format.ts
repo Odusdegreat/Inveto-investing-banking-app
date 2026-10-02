@@ -77,7 +77,9 @@ export function dayLabel(iso: string) {
   return formatDate(iso);
 }
 
-export function maskAccountNumber(value: string) {
+export function maskAccountNumber(value: string | null | undefined) {
+  if (typeof value !== "string" || !value.trim()) return "Not available";
+  value = value.trim();
   if (value.length <= 4) return value;
   return `•••• ${value.slice(-4)}`;
 }

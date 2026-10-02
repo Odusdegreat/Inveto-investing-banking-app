@@ -1,12 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Text, View } from "react-native";
-import { useForm, Controller } from "react-hook-form";
+import { StyleSheet, Text, View } from "react-native";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { AuthLink, AuthShell, Field } from "@/src/components/AuthShell";
-import { Banner, Button } from "@/src/components/ui";
+import { Banner, Button, Card } from "@/src/components/ui";
 import { useTheme } from "@/src/theme/ThemeProvider";
 import { useSession } from "@/src/store/session";
 
@@ -20,10 +21,13 @@ type Values = z.infer<typeof schema>;
 export default function SignIn() {
   const router = useRouter();
   const { colors } = useTheme();
+  const challengeToken = useSession((s) => s.challengeToken);
+  const verifyTwoFactor = useSession((s) => s.verifyTwoFactor);
   const signIn = useSession((s) => s.signIn);
   const busy = useSession((s) => s.busy);
   const sessionError = useSession((s) => s.error);
   const clearError = useSession((s) => s.clearError);
+  const [code, setCode] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
   const {
@@ -32,7 +36,7 @@ export default function SignIn() {
     formState: { errors },
   } = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { email: "odue@inveto.app", password: "inveto123" },
+    defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = handleSubmit(async (values) => {
@@ -43,6 +47,17 @@ export default function SignIn() {
     router.replace("/home");
   });
 
+  const onVerify = async () => {
+    setLocalError(null);
+    clearError();
+    if (await verifyTwoFactor(code)) router.replace("/home");
+  };
+
+  const backToPassword = () => {
+    useSession.setState({ challengeToken: null, error: null });
+    setCode("");
+  };
+
   const message = localError ?? sessionError;
 
   return (
@@ -50,16 +65,12 @@ export default function SignIn() {
       title="Welcome back"
       subtitle="Sign in to manage your money."
       footer={
-        <View>
-          <AuthLink label="Forgot your password?" onPress={() => router.push("/forgot")} />
-          <Text
-            style={{
-              color: colors.textSubtle,
-              fontSize: 14,
-              textAlign: "center",
-              marginTop: 16,
-            }}
-          >
+        <View style={styles.footer}>
+          <AuthLink
+            label="Forgot your password?"
+            onPress={() => router.push("/forgot")}
+          />
+          <Text style={[styles.footerText, { color: colors.textSubtle }]}>
             New here?{" "}
             <Text
               onPress={() => router.push("/signup")}
@@ -74,50 +85,124 @@ export default function SignIn() {
     >
       {message ? <Banner tone="danger" message={message} /> : null}
 
-      <Controller
-        control={control}
-        name="email"
-        render={({ field }) => (
-          <Field
-            label="Email"
-            value={field.value}
-            onChangeText={field.onChange}
-            onBlur={field.onBlur}
-            error={errors.email?.message}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            placeholder="you@example.com"
-            textContentType="emailAddress"
-          />
-        )}
-      />
+      {challengeToken ? (
+        <>
+          <Card style={styles.stepCard}>
+            <View style={[styles.stepIcon, { backgroundColor: colors.accentSoft }]}>
+              <Ionicons name="shield-checkmark-outline" size={22} color={colors.accent} />
+            </View>
+            <View style={styles.stepText}>
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: "700" }}>
+                Two-factor authentication
+              </Text>
+              <Text
+                style={{ color: colors.textSubtle, fontSize: 13, lineHeight: 19 }}
+              >
+                Enter the 6-digit code from your authenticator app to finish signing
+                in.
+              </Text>
+            </View>
+          </Card>
 
-      <Controller
-        control={control}
-        name="password"
-        render={({ field }) => (
           <Field
-            label="Password"
-            value={field.value}
-            onChangeText={field.onChange}
-            onBlur={field.onBlur}
-            error={errors.password?.message}
-            secureTextEntry
-            autoComplete="current-password"
-            placeholder="••••••••"
-            textContentType="password"
-            hint="Demo build — any 6+ character password works."
+            label="Authenticator code"
+            value={code}
+            onChangeText={setCode}
+            keyboardType="number-pad"
+            autoComplete="one-time-code"
+            placeholder="000000"
+            maxLength={6}
+            action={{ label: "Use password instead", onPress: backToPassword }}
           />
-        )}
-      />
 
-      <Button
-        label="Sign in"
-        size="lg"
-        loading={busy}
-        onPress={onSubmit}
-      />
+          <Button
+            label="Verify code"
+            size="lg"
+            icon="checkmark-circle-outline"
+            loading={busy}
+            disabled={code.length < 6}
+            onPress={onVerify}
+          />
+        </>
+      ) : (
+        <>
+          <Controller
+            control={control}
+            name="email"
+            render={({ field }) => (
+              <Field
+                label="Email"
+                value={field.value}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                error={errors.email?.message}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                placeholder="you@example.com"
+                textContentType="emailAddress"
+              />
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="password"
+            render={({ field }) => (
+              <Field
+                label="Password"
+                value={field.value}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                error={errors.password?.message}
+                secureTextEntry
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                textContentType="password"
+                action={{
+                  label: "Forgot password?",
+                  onPress: () => router.push("/forgot"),
+                }}
+              />
+            )}
+          />
+
+          <Button
+            label="Sign in"
+            size="lg"
+            icon="log-in-outline"
+            loading={busy}
+            onPress={onSubmit}
+          />
+        </>
+      )}
     </AuthShell>
   );
 }
+
+const styles = StyleSheet.create({
+  footer: {
+    gap: 24,
+  },
+  footerText: {
+    fontSize: 15,
+    textAlign: "center",
+  },
+  stepCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    padding: 18,
+  },
+  stepIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepText: {
+    flex: 1,
+    gap: 6,
+  },
+});

@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 import type { CardBrand } from "@/src/types";
+import { useTheme } from "@/src/theme/ThemeProvider";
 
 const SIZES = { sm: 40, md: 52, lg: 72 } as const;
 
@@ -86,21 +87,27 @@ export function CardBrandMark({
 export function TransactionIcon({
   kind,
   category,
+  amount,
   size = 44,
 }: {
   kind: string;
   category: string;
+  amount?: number;
   size?: number;
 }) {
-  const icon = ICON_BY_CATEGORY[category] ?? ICON_BY_KIND[kind] ?? "ellipse-outline";
+  const isIncoming = amount !== undefined && amount > 0;
+  const icon = isIncoming ? "arrow-down-outline" : "arrow-up-outline";
+  const color = isIncoming ? "#22C55E" : "#EF4444";
+  const bgColor = isIncoming ? "rgba(34,197,94,0.14)" : "rgba(239,68,68,0.14)";
+
   return (
     <View
       style={[
         styles.icon,
-        { width: size, height: size, borderRadius: size / 3 },
+        { width: size, height: size, borderRadius: size / 3, backgroundColor: bgColor },
       ]}
     >
-      <Ionicons name={icon} size={size * 0.48} color="#22C55E" />
+      <Ionicons name={icon} size={size * 0.48} color={color} />
     </View>
   );
 }
@@ -133,3 +140,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34,197,94,0.14)",
   },
 });
+
+/**
+ * The INVETO diamond.
+ *
+ * This replaces a static `assets/logo.svg`, which had `fill="white"` baked in
+ * and so vanished on light backgrounds. Rendering the paths here keeps the
+ * colour tied to the theme.
+ */
+export function Logo({ size = 24, color }: { size?: number; color?: string }) {
+  const { colors } = useTheme();
+  const fill = color ?? colors.text;
+
+  return (
+    <Svg width={size} height={size} viewBox="0 0 56 56">
+      <Path d="M28 28H7L28 7V28Z" fill={fill} />
+      <Path d="M28 28H49L28 49V28Z" fill={fill} />
+      <Path d="M49 7V28L28 7H49Z" fill={fill} />
+      <Path d="M7 49V28L28 49H7Z" fill={fill} />
+    </Svg>
+  );
+}

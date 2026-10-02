@@ -7,8 +7,9 @@ import {
   Card,
   Divider,
   HeaderBar,
+  ListCard,
   Screen,
-  SectionHeader,
+  Section,
 } from "@/src/components/ui";
 import { useTheme } from "@/src/theme/ThemeProvider";
 
@@ -76,7 +77,7 @@ export default function HelpSupportScreen() {
   }, [query]);
 
   return (
-    <Screen>
+    <Screen gap={22}>
       <HeaderBar title="Help & support" onBack={() => router.back()} />
 
       <TextInput
@@ -98,10 +99,8 @@ export default function HelpSupportScreen() {
         }}
       />
 
-      <View style={{ height: 22 }} />
-
-      <SectionHeader title="Contact us" />
-      <Card style={{ paddingVertical: 4 }}>
+      <Section title="Contact us" gap={12}>
+        <ListCard>
         {CONTACTS.map((contact, index) => (
           <View key={contact.label}>
             <Pressable
@@ -142,82 +141,81 @@ export default function HelpSupportScreen() {
             {index < CONTACTS.length - 1 ? <Divider inset={64} /> : null}
           </View>
         ))}
-      </Card>
+        </ListCard>
+      </Section>
 
-      <View style={{ height: 22 }} />
-
-      <SectionHeader
+      <Section
         title={query ? `${results.length} results` : "Common questions"}
-      />
-
-      {results.length ? (
-        <Card style={{ paddingVertical: 4 }}>
-          {results.map((item, index) => {
-            const expanded = open === item.q;
-            return (
-              <View key={item.q}>
-                <Pressable
-                  onPress={() => setOpen(expanded ? null : item.q)}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded }}
-                  accessibilityLabel={item.q}
-                  style={({ pressed }) => ({
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
-                    paddingHorizontal: 14,
-                    paddingVertical: 14,
-                    backgroundColor: pressed ? colors.surfaceRaised : "transparent",
-                  })}
-                >
-                  <Text
-                    style={{ color: colors.text, fontSize: 14, fontWeight: "600", flex: 1 }}
+        gap={12}
+      >
+        {results.length ? (
+          <ListCard>
+            {results.map((item, index) => {
+              const expanded = open === item.q;
+              return (
+                <View key={item.q}>
+                  <Pressable
+                    onPress={() => setOpen(expanded ? null : item.q)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded }}
+                    accessibilityLabel={item.q}
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      paddingHorizontal: 18,
+                      paddingVertical: 16,
+                      backgroundColor: pressed ? colors.surfaceRaised : "transparent",
+                    })}
                   >
-                    {item.q}
-                  </Text>
-                  <Ionicons
-                    name={expanded ? "chevron-up" : "chevron-down"}
-                    size={17}
-                    color={colors.textSubtle}
-                  />
-                </Pressable>
-                {expanded ? (
-                  <Text
-                    style={{
-                      color: colors.textMuted,
-                      fontSize: 13,
-                      lineHeight: 21,
-                      paddingHorizontal: 14,
-                      paddingBottom: 14,
-                    }}
-                  >
-                    {item.a}
-                  </Text>
-                ) : null}
-                {index < results.length - 1 ? <Divider inset={14} /> : null}
-              </View>
-            );
-          })}
-        </Card>
-      ) : (
-        <Card style={{ padding: 20, alignItems: "center", gap: 8 }}>
-          <Ionicons name="search-outline" size={22} color={colors.textSubtle} />
-          <Text style={{ color: colors.textMuted, fontSize: 14 }}>
-            No articles match “{query}”.
-          </Text>
-          <Text style={{ color: colors.textSubtle, fontSize: 12 }}>
-            Try a different word, or contact support above.
-          </Text>
-        </Card>
-      )}
+                    <Text
+                      style={{ color: colors.text, fontSize: 15, fontWeight: "600", flex: 1 }}
+                    >
+                      {item.q}
+                    </Text>
+                    <Ionicons
+                      name={expanded ? "chevron-up" : "chevron-down"}
+                      size={18}
+                      color={colors.textSubtle}
+                    />
+                  </Pressable>
+                  {expanded ? (
+                    <Text
+                      style={{
+                        color: colors.textMuted,
+                        fontSize: 14,
+                        lineHeight: 22,
+                        paddingHorizontal: 18,
+                        paddingBottom: 16,
+                      }}
+                    >
+                      {item.a}
+                    </Text>
+                  ) : null}
+                  {index < results.length - 1 ? <Divider inset={18} /> : null}
+                </View>
+              );
+            })}
+          </ListCard>
+        ) : (
+          <Card style={{ padding: 24, alignItems: "center", gap: 10 }}>
+            <Ionicons name="search-outline" size={24} color={colors.textSubtle} />
+            <Text style={{ color: colors.textMuted, fontSize: 15 }}>
+              No articles match “{query}”.
+            </Text>
+            <Text style={{ color: colors.textSubtle, fontSize: 13, textAlign: "center" }}>
+              Try a different word, or contact support above.
+            </Text>
+          </Card>
+        )}
+      </Section>
 
       <Text
         style={{
           color: colors.textSubtle,
-          fontSize: 12,
+          fontSize: 13,
           textAlign: "center",
-          lineHeight: 18,
-          marginTop: 24,
+          lineHeight: 19,
         }}
       >
         INVETO is a regulated deposit-taking institution. Deposits are insured up

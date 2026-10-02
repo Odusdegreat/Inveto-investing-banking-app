@@ -1,9 +1,8 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Pressable, Switch, Text, TextInput, View } from "react-native";
-
-import { ApiError, api } from "@/src/api/client";
+import { Switch, Text, View, StyleSheet } from "react-native";
+import { api } from "@/src/api/client";
+import { Field } from "@/src/components/AuthShell";
 import { CardBrandMark } from "@/src/components/marks";
 import {
   Banner,
@@ -11,263 +10,237 @@ import {
   Card,
   Divider,
   EmptyState,
+  ErrorState,
   HeaderBar,
+  ListCard,
   Row,
   Screen,
+  Section,
   SectionHeader,
   Skeleton,
+  Stack,
 } from "@/src/components/ui";
+import { errorMessage, toast } from "@/src/components/Toast";
 import { useApi } from "@/src/hooks/useApi";
+import { useSession } from "@/src/store/session";
 import { useTheme } from "@/src/theme/ThemeProvider";
-import type { CardBrand } from "@/src/types";
+import type { CardBrand, PaymentCard } from "@/src/types";
 
 const BRANDS: CardBrand[] = ["visa", "mastercard", "amex", "paystack", "bank"];
-
 export default function PaymentMethodsScreen() {
   const router = useRouter();
-  const { colors, radii } = useTheme();
-  const { data, loading, error, reload } = useApi(() => api.cards.list(), []);
-
+  const { colors } = useTheme();
+  const cards = useApi(() => api.cards.list(), []);
+  const user = useSession((state) => state.user);
   const [adding, setAdding] = useState(false);
   const [brand, setBrand] = useState<CardBrand>("visa");
   const [label, setLabel] = useState("");
-  const [number, setNumber] = useState("");
+  const [last4, setLast4] = useState("");
   const [expiry, setExpiry] = useState("");
+  const [removing, setRemoving] = useState<PaymentCard | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-
-  const digits = number.replace(/\D/g, "");
-  const last4 = digits.slice(-4);
-  const valid =
-    digits.length >= 12 && /^\d{2}\/\d{2}$/.test(expiry) && label.trim().length > 0;
-
-  const submit = async () => {
-    setFailure(null);
+  const valid = /^\d{4}$/.test(last4) && /^(0[1-9]|1[0-2])\/\d{2}$/.test(expiry) && label.trim().length > 0;
+  const mutate = async (action: () => Promise<unknown>, message: string) => {
+    if (busy) return false;
     setBusy(true);
+    setFailure(null);
     try {
-      await api.cards.add({
-        brand,
-        label: label.trim(),
-        last4: last4.padStart(4, "0"),
-        expiry,
-        holder: "ODUE ASARE",
-      });
-      setAdding(false);
-      setLabel("");
-      setNumber("");
-      setExpiry("");
-      await reload();
-    } catch (err) {
-      setFailure(err instanceof ApiError ? err.message : "Could not add card");
-    } finally {
-      setBusy(false);
+      await action();
+      toast.success(message);
+      await cards.reload();
+      return true;
+    } catch (error) {
+      const message = errorMessage(error);
+      setFailure(message);
+      toast.error(message);
+      return false;
+    } finally { setBusy(false); }
+  };
+  const add = async () => {
+    if (!valid) return;
+    if (await mutate(() => api.cards.add({ brand, label: label.trim(), last4, expiry, holder: user?.fullName ?? "" }), "Test card saved.")) {
+      setAdding(false); setLabel(""); setLast4(""); setExpiry("");
     }
   };
-
   return (
-    <Screen>
+    <Screen
+      gap={22}
+      onRefresh={cards.refresh}
+      refreshing={cards.refreshing}
+    >
       <HeaderBar title="Payment methods" onBack={() => router.back()} />
 
-      {error ? <Banner tone="danger" message={error} /> : null}
-
-      <SectionHeader title={`${data?.length ?? 0} cards`} />
-
-      {loading && !data ? (
-        <Card style={{ padding: 16, gap: 14 }}>
-          <Skeleton height={44} />
-          <Skeleton height={44} width="80%" />
-        </Card>
-      ) : data?.length ? (
-        <Card style={{ paddingVertical: 4 }}>
-          {data.map((card, index) => (
-            <View key={card.id}>
-              <Row
-                title={card.label}
-                subtitle={`•••• ${card.last4} · expires ${card.expiry}`}
-                left={<CardBrandMark brand={card.brand} size="sm" />}
-                right={
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    {card.isDefault ? (
-                      <Text
-                        style={{
-                          color: colors.accent,
-                          fontSize: 10,
-                          fontWeight: "800",
-                        }}
-                      >
-                        DEFAULT
-                      </Text>
-                    ) : null}
-                    <Pressable
-                      onPress={() =>
-                        Alert.alert("Remove card?", `•••• ${card.last4} will be removed.`, [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Remove",
-                            style: "destructive",
-                            onPress: () => void api.cards.remove(card.id),
-                          },
-                        ])
-                      }
-                      hitSlop={10}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remove card ending ${card.last4}`}
-                    >
-                      <Ionicons name="trash-outline" size={17} color={colors.danger} />
-                    </Pressable>
-                  </View>
-                }
-              />
-              {index < data.length - 1 ? <Divider inset={60} /> : null}
-            </View>
-          ))}
-        </Card>
-      ) : (
-        <EmptyState
+      <Stack gap={12}>
+        <Button
+          label="Link a card with Paystack"
           icon="card-outline"
-          title="No cards yet"
-          message="Add a card to pay bills and check out faster."
+          onPress={() => router.push("/card-link")}
         />
-      )}
+        <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 21 }}>
+          Use hosted checkout to link a test card. Full card details are entered
+          with Paystack.
+        </Text>
+      </Stack>
 
-      <View style={{ height: 12 }} />
+      {failure ? <Banner tone="danger" message={failure} /> : null}
+      {cards.error ? (
+        <ErrorState message={cards.error} onRetry={cards.reload} />
+      ) : null}
 
-      <Card style={{ padding: 16, gap: 10 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <Ionicons name="snow-outline" size={17} color={colors.textMuted} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.text, fontSize: 14, fontWeight: "600" }}>
-              Freeze cards
-            </Text>
-            <Text style={{ color: colors.textSubtle, fontSize: 12 }}>
-              Temporarily block new charges
-            </Text>
-          </View>
-          <Switch
-            value={data?.some((card) => card.frozen) ?? false}
-            onValueChange={(next) =>
-              void (next
-                ? api.cards.freezeAll(true)
-                : api.cards.freezeAll(false))
-            }
-            trackColor={{ true: colors.accent, false: colors.border }}
-            thumbColor={colors.surface}
-            accessibilityLabel="Freeze all cards"
+      {removing ? (
+        <Card style={{ padding: 20, gap: 14 }}>
+          <SectionHeader title={`Remove ${removing.label}?`} />
+          <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 21 }}>
+            Card ending {removing.last4} will be removed from your account.
+          </Text>
+          <Button label="Remove card" variant="danger" loading={busy} onPress={async () => { if (await mutate(() => api.cards.remove(removing.id), "Card removed.")) setRemoving(null); }} />
+          <Button label="Keep card" variant="ghost" disabled={busy} onPress={() => setRemoving(null)} />
+        </Card>
+      ) : null}
+
+      <Section title={`${cards.data?.length ?? 0} cards`} gap={12}>
+        {cards.loading && !cards.data ? (
+          <Card style={{ padding: 20, gap: 18 }}>
+            <Skeleton height={44} />
+            <Skeleton height={44} width="75%" />
+          </Card>
+        ) : cards.data?.length ? (
+          <Stack gap={12}>
+            {cards.data.map((card) => (
+              <Card key={card.id} style={{ padding: 20, gap: 14 }}>
+                <Row
+                  title={card.label}
+                  subtitle={`•••• ${card.last4} · ${card.expiry}${card.isDefault ? " · Default" : ""}`}
+                  left={<CardBrandMark brand={card.brand} size="sm" />}
+                />
+                <Divider />
+                <Row
+                  title={card.frozen ? "Card frozen" : "Card active"}
+                  right={
+                    <Switch
+                      accessibilityLabel={`Freeze ${card.label}`}
+                      value={card.frozen}
+                      disabled={busy}
+                      onValueChange={(frozen) => {
+                        void mutate(
+                          () => api.cards.setFrozen(card.id, frozen),
+                          frozen ? "Card frozen." : "Card unfrozen.",
+                        );
+                      }}
+                    />
+                  }
+                />
+                <View style={styles.cardActions}>
+                  {!card.isDefault ? (
+                    <Button
+                      label="Make default"
+                      variant="secondary"
+                      disabled={busy}
+                      onPress={() => mutate(() => api.cards.setDefault(card.id), "Default card updated.")}
+                    />
+                  ) : null}
+                  <Button
+                    label="Remove card"
+                    variant="ghost"
+                    disabled={busy}
+                    onPress={() => setRemoving(card)}
+                  />
+                </View>
+              </Card>
+            ))}
+          </Stack>
+        ) : !cards.error ? (
+          <EmptyState
+            icon="card-outline"
+            title="No cards yet"
+            message="Link a card to get started."
           />
-        </View>
-      </Card>
+        ) : null}
+      </Section>
+
+      {cards.data?.length ? (
+        <ListCard>
+          <Row
+            title="Freeze all cards"
+            subtitle="Temporarily block new charges"
+            right={
+              <Switch
+                accessibilityLabel="Freeze all cards"
+                value={cards.data.every((card) => card.frozen)}
+                disabled={busy}
+                onValueChange={(frozen) => {
+                  void mutate(
+                    () => api.cards.freezeAll(frozen),
+                    frozen ? "All cards frozen." : "All cards unfrozen.",
+                  );
+                }}
+              />
+            }
+          />
+        </ListCard>
+      ) : null}
 
       {adding ? (
-        <View style={{ marginTop: 20 }}>
-          <SectionHeader title="New card" />
-          <Card style={{ padding: 18, gap: 14 }}>
-            {failure ? <Banner tone="danger" message={failure} /> : null}
-
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-              {BRANDS.map((option) => {
-                const active = brand === option;
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => setBrand(option)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
-                    accessibilityLabel={option}
-                    style={{
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: 8,
-                      borderRadius: radii.md,
-                      borderWidth: 1,
-                      borderColor: active ? colors.accent : colors.border,
-                      backgroundColor: active ? colors.accentSoft : "transparent",
-                    }}
-                  >
-                    <CardBrandMark brand={option} size="sm" />
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <TextInput
-              value={label}
-              onChangeText={setLabel}
-              placeholder="Card nickname, e.g. Personal"
-              placeholderTextColor={colors.textSubtle}
-              accessibilityLabel="Card nickname"
-              style={input(colors, radii)}
-            />
-            <TextInput
-              value={number}
-              onChangeText={setNumber}
-              keyboardType="number-pad"
-              placeholder="Card number"
-              placeholderTextColor={colors.textSubtle}
-              accessibilityLabel="Card number"
-              style={input(colors, radii)}
-            />
-            <TextInput
-              value={expiry}
-              onChangeText={setExpiry}
-              keyboardType="numbers-and-punctuation"
-              placeholder="Expiry, e.g. 09/29"
-              placeholderTextColor={colors.textSubtle}
-              accessibilityLabel="Card expiry"
-              style={input(colors, radii)}
-            />
-
-            <Button
-              label="Save card"
-              onPress={submit}
-              loading={busy}
-              disabled={!valid}
-            />
-            <Button
-              label="Cancel"
-              variant="ghost"
-              onPress={() => setAdding(false)}
-            />
-          </Card>
-        </View>
-      ) : (
-        <View style={{ marginTop: 16 }}>
-          <Button
-            label="Add a card"
-            variant="secondary"
-            icon="add"
-            onPress={() => setAdding(true)}
+        <Card style={{ padding: 20, gap: 16 }}>
+          <SectionHeader title="Test card details" />
+          <Banner
+            tone="info"
+            message="This saves simulated card details. It does not link or charge a real card."
           />
-        </View>
+          <View style={styles.brandRow}>
+            {BRANDS.map((option) => (
+              <Button
+                key={option}
+                label={option}
+                variant={option === brand ? "primary" : "secondary"}
+                onPress={() => setBrand(option)}
+              />
+            ))}
+          </View>
+          <Field label="Card nickname" value={label} onChangeText={setLabel} />
+          <Field
+            label="Last four digits only"
+            value={last4}
+            onChangeText={(value) => setLast4(value.replace(/\D/g, "").slice(0, 4))}
+            keyboardType="number-pad"
+            maxLength={4}
+          />
+          <Field
+            label="Expiry (MM/YY)"
+            value={expiry}
+            onChangeText={setExpiry}
+            maxLength={5}
+            placeholder="09/29"
+          />
+          <Button label="Save test card" loading={busy} disabled={!valid} onPress={add} />
+          <Button
+            label="Cancel"
+            variant="ghost"
+            disabled={busy}
+            onPress={() => setAdding(false)}
+          />
+        </Card>
+      ) : (
+        <Button
+          label="Add a test card manually"
+          variant="ghost"
+          onPress={() => setAdding(true)}
+        />
       )}
-
-      <Text
-        style={{
-          color: colors.textSubtle,
-          fontSize: 11,
-          textAlign: "center",
-          lineHeight: 17,
-          marginTop: 18,
-        }}
-      >
-        Card details are tokenised and never stored on this device. Demo build —
-        nothing is sent anywhere.
-      </Text>
     </Screen>
   );
 }
 
-function input(
-  colors: ReturnType<typeof useTheme>["colors"],
-  radii: ReturnType<typeof useTheme>["radii"],
-) {
-  return {
-    minHeight: 48,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSunken,
-    color: colors.text,
-    paddingHorizontal: 14,
-    fontSize: 15,
-  } as const;
-}
+const styles = StyleSheet.create({
+  cardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  brandRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+});

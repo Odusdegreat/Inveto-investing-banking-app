@@ -17,10 +17,10 @@ export type Account = {
   id: Id;
   name: string;
   kind: AccountKind;
-  number: string;
+  number: string | null;
   balance: number;
   currency: CurrencyCode;
-  interestRate: number;
+  interestRate: number | null;
   openedAt: string;
   frozen: boolean;
 };
@@ -171,6 +171,10 @@ export type SecurityState = {
   autoLockSeconds: number;
   transactionAlerts: boolean;
   loginAlerts: boolean;
+  emailTransactionAlerts: boolean;
+  emailLoginAlerts: boolean;
+  emailSecurityAlerts: boolean;
+  emailMarketing: boolean;
 };
 
 export type Preferences = {
@@ -203,4 +207,118 @@ export type TransferReceipt = {
   fromAccountId: Id;
   createdAt: string;
   status: TransactionStatus;
+};
+
+export type SandboxTopUp = {
+  id: Id;
+  accountId: Id;
+  amount: number;
+  currency: CurrencyCode;
+  status: "completed" | "pending" | "failed";
+  createdAt: string;
+};
+
+export type TransferQuote = {
+  fee: number;
+  currency: CurrencyCode;
+  estimatedArrival: string;
+};
+
+export type ReceivingDetails = {
+  accountId: Id;
+  accountName: string;
+  bankName: string;
+  accountNumber: string;
+  accountType: string;
+  routingNumber?: string;
+  swiftCode?: string;
+  iban?: string;
+};
+
+export type Recipient = {
+  id: Id;
+  name: string;
+  bank: string;
+  accountNumber: string;
+  accountId: Id;
+};
+
+export type SandboxTransfer = {
+  id: Id;
+  fromAccountId: Id;
+  recipientAccountId: Id;
+  amount: number;
+  fee: number;
+  currency: CurrencyCode;
+  note: string;
+  status: TransactionStatus;
+  createdAt: string;
+  reference: string;
+};
+
+export type ExternalBank = {
+  id: Id;
+  code: string;
+  name: string;
+  country: string;
+  currency: CurrencyCode;
+  minAmount: number;
+  maxAmount: number;
+};
+
+export type ExternalTransferQuote = {
+  fee: number;
+  total: number;
+  sufficientFunds: boolean;
+};
+
+export type ExternalTransferStatus = "completed" | "pending" | "failed";
+
+export type ExternalTransfer = {
+  id: Id;
+  userId: Id;
+  fromAccountId: Id;
+  externalBankId: Id;
+  accountNumber: string;
+  accountName: string;
+  amount: number;
+  fee: number;
+  total: number;
+  status: ExternalTransferStatus;
+  bankCode: string;
+  bankName: string;
+  version: number;
+  createdAt: string;
+  settledAt: string | null;
+  cancelledAt: string | null;
+  reference: string;
+  debitedAmount: number;
+  simulated: boolean;
+};
+
+export type ExternalTransferCreateInput = {
+  fromAccountId: Id;
+  externalBankId: Id;
+  accountNumber: string;
+  accountName: string;
+  amount: number;
+  stepUpToken: string;
+  simulationOutcome?: "completed" | "pending" | "failure";
+  note?: string;
+};
+
+export type ExternalTransferCancelInput = {
+  version?: number;
+};
+
+export type ExternalTransferCancelResponse = {
+  status: "cancelled";
+  refundedAmount: number;
+  version: number;
+};
+
+export type ExternalTransferListParams = {
+  search?: string;
+  limit?: number;
+  before?: string;
 };

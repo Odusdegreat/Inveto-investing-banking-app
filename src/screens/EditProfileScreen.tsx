@@ -2,9 +2,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { z } from "zod";
 
+import { toast } from "@/src/components/Toast";
 import { ApiError, api } from "@/src/api/client";
 import { Field } from "@/src/components/AuthShell";
 import {
@@ -16,6 +17,7 @@ import {
   Screen,
   SectionHeader,
   Skeleton,
+  Stack,
 } from "@/src/components/ui";
 import { useApi } from "@/src/hooks/useApi";
 import { useSession } from "@/src/store/session";
@@ -67,6 +69,7 @@ export default function EditProfileScreen() {
       await api.user.update(values);
       await refreshUser();
       setSaved(true);
+      toast.success("Profile saved.");
       reset(values);
     } catch (err) {
       setFailure(err instanceof ApiError ? err.message : "Could not save changes");
@@ -76,7 +79,7 @@ export default function EditProfileScreen() {
   });
 
   return (
-    <Screen>
+    <Screen gap={22}>
       <HeaderBar title="Edit profile" onBack={() => router.back()} />
 
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
@@ -84,84 +87,67 @@ export default function EditProfileScreen() {
       {failure ? <Banner tone="danger" message={failure} /> : null}
 
       {loading && !user ? (
-        <Card style={{ padding: 18, gap: 16 }}>
+        <Card style={{ padding: 20, gap: 18 }}>
           <Skeleton height={16} width="30%" />
-          <Skeleton height={50} />
+          <Skeleton height={56} />
           <Skeleton height={16} width="30%" />
-          <Skeleton height={50} />
+          <Skeleton height={56} />
         </Card>
       ) : (
-        <Controller
-          control={control}
-          name="fullName"
-          render={({ field }) => (
-            <View>
-              <SectionHeader title="Personal details" />
-              <View style={{ gap: 14 }}>
-                <Field
-                  label="Full name"
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  onBlur={field.onBlur}
-                  error={errors.fullName?.message}
-                  autoCapitalize="words"
-                  autoComplete="name"
-                  placeholder="Odue Asare"
-                />
-                <Field
-                  label="Email"
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  onBlur={field.onBlur}
-                  error={errors.email?.message}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                />
-                <Field
-                  label="Phone"
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  onBlur={field.onBlur}
-                  error={errors.phone?.message}
-                  keyboardType="phone-pad"
-                  autoComplete="tel"
-                  placeholder="+1 555 010 2288"
-                />
-              </View>
-            </View>
-          )}
-        />
+        <Stack gap={20}>
+          <SectionHeader title="Personal details" />
+          {(["fullName", "email", "phone"] as const).map((name) => (
+            <Controller key={name} control={control} name={name} render={({ field }) => (
+              <Field
+                label={name === "fullName" ? "Full name" : name === "email" ? "Email" : "Phone"}
+                value={field.value ?? ""}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                error={errors[name]?.message}
+                keyboardType={name === "email" ? "email-address" : name === "phone" ? "phone-pad" : "default"}
+                autoCapitalize={name === "fullName" ? "words" : "none"}
+                autoComplete={name === "fullName" ? "name" : name === "email" ? "email" : "tel"}
+                textContentType={name === "fullName" ? "name" : name === "email" ? "emailAddress" : "telephoneNumber"}
+                placeholder={name === "fullName" ? "Odue Asare" : name === "email" ? "you@example.com" : "+1 555 010 2288"}
+              />
+            )} />
+          ))}
+          <Button
+            label="Verify email address"
+            variant="ghost"
+            icon="mail-outline"
+            onPress={() => router.push("/verify-email")}
+          />
+        </Stack>
       )}
 
       {user ? (
-        <View style={{ marginTop: 24, gap: 12 }}>
+        <Stack gap={14}>
           <Button
-            label={busy ? "Saving" : "Save changes"}
+            label="Save changes"
             size="lg"
             loading={busy}
             disabled={!isDirty}
             onPress={onSubmit}
           />
-          <Text
-            style={{
-              color: colors.textSubtle,
-              fontSize: 12,
-              textAlign: "center",
-              lineHeight: 18,
-            }}
-          >
+          <Text style={[styles.footnote, { color: colors.textSubtle }]}>
             Member since{" "}
             {new Date(user.memberSince).toLocaleDateString("en-GB", {
               month: "long",
               year: "numeric",
             })}
-            . Some changes may require re-verification once a backend is
-            connected.
+            . Email changes may require verification.
           </Text>
-        </View>
+        </Stack>
       ) : null}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  footnote: {
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 19,
+  },
+});

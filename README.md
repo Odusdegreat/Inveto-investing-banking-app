@@ -1,136 +1,128 @@
 # INVETO
 
-A mobile banking and investing app, built with Expo and Expo Router.
+Mobile banking and investing frontend built with Expo and Expo Router.
+The app now calls the HTTP backend; the old local mock database is not used.
 
-The backend is not connected yet. Every screen runs against a local mock API
-that persists to device storage, so the full product can be explored end to end
-before any server exists.
+## Run locally
 
-## What works today
+1. Install dependencies with `npm install`.
+2. Copy `.env.example` to `.env` and set `EXPO_PUBLIC_API_URL`.
+3. Start the backend, then run `npm run start` (or `npm run web`).
 
-**Auth** — sign in, sign up, forgot password, with the session token held in the
-device keystore and the root layout gating the app on session state.
-
-**Step-up confirmation** — a 4-digit transaction PIN that re-confirms identity
-for one sensitive action. It is **not** a sign-in credential. The app has no PIN
-sign-in; a wrong PIN can never produce a session.
-
-**Banking** — multi-account balances, full transaction history with filters,
-transaction detail with shareable receipts, and transfers to saved beneficiaries
-with live fee calculation, balance validation, and haptics.
-
-**Investing** — product catalogue with asset-class filters, watchlist, portfolio
-value and all-time gain, and a buy/sell ticket that settles against the seeded
-price and updates holdings and wallet balance.
-
-**Cards** — add, freeze, and remove cards. Brands render as local SVG marks, so
-nothing depends on a remote image host.
-
-**Security** — change PIN, change password, biometric unlock, 2FA toggle, and
-per-device session revocation. Turning a control off requires the transaction
-PIN; turning one on does not.
-
-**Everything else** — notification inbox with read state, profile editing,
-light/dark/system theming, and a searchable help centre.
-
-## Demo credentials
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Email    | `odue@inveto.app`  |
-| Password | any 6+ characters  |
-
-The transaction PIN is `1234`. It confirms sensitive actions, not sign-in.
-
-## Stack
-
-| Technology | Purpose |
-| --- | --- |
-| Expo SDK 57 / React Native 0.86 | App runtime |
-| Expo Router | File-based routing and auth gating |
-| TypeScript | Type safety |
-| Zustand | Session and theme state |
-| React Hook Form + Zod | Auth and profile forms |
-| Expo Secure Store | Session token storage |
-| Expo Local Authentication | Biometric unlock |
-| AsyncStorage | Mock API persistence |
-| Reanimated | Tab and chart animation |
-
-Styling is plain `StyleSheet` against design tokens in `src/theme`, so tokens
-and light/dark themes apply consistently across every screen. There is no CSS
-or utility-class layer: `babel.config.js` and `metro.config.js` only handle
-`babel-preset-expo` and `react-native-svg-transformer`.
-
-## Layout
-
-```
-app/                    routes (thin wrappers, no business logic)
-  (auth)/               sign in, sign up, forgot
-  (main)/               the five tab screens
-pin.tsx                 step-up PIN confirmation (modal, signed-in only)
-src/
-  api/                  mock API and seed data
-  components/           shared UI primitives
-  hooks/                data-fetching hook
-  lib/                  formatting
-  screens/              screen implementations
-  store/                session store
-  theme/                tokens and theme provider
-  types/                shared types
-components/BottomNav.tsx custom tab bar
-babel.config.js         babel-preset-expo only
-metro.config.js         expo default config + SVG transformer
+```env
+EXPO_PUBLIC_API_URL=http://localhost:3000
 ```
 
-## Running it
+Use your computer's reachable LAN IP instead of localhost on a physical phone.
+For the Android emulator, use `http://10.0.2.2:3000`. Restart Metro after changing
+configuration. Browser origins must be allowed in the backend's `CORS_ORIGINS`.
+Public frontend environment variables must not contain server secrets.
+
+## API integration
+
+`src/api/http.ts` handles bearer tokens, timeouts, structured errors, and a single
+shared refresh when concurrent requests receive 401. Native sessions use SecureStore;
+web sessions use sessionStorage and survive reloads in the same tab. Old mock tokens
+and mock data are ignored. `src/api/client.ts` maps screen operations to the unprefixed
+backend routes and adapts watchlists, notification targets, and security preferences.
+
+Registration, login, authenticator challenges, logout, password reset requests,
+initial PIN setup, PIN changes, and password changes use server endpoints.
+Two-factor enrollment/confirmation/removal use their dedicated endpoints.
+Passkey registration and confirmation use WebAuthn on web and the native passkey
+adapter on iOS/Android. The server verifies the signed attestation/assertion; a
+local biometric check never creates approval tokens.
+
+Transfers and investment orders request a server quote before PIN confirmation.
+Displayed pre-confirmation fees are estimates. PIN tokens include the exact action.
+The original body and idempotency key are retained for retries while the screen is
+mounted; automatic token refresh also retains them. If an outcome is uncertain,
+retry on that screen. Pending operations are not persisted across app restarts;
+check server transaction/order history before recreating an interrupted operation.
+
+Transactions and notifications follow cursor pagination. Successful mutations notify
+mounted screens to reload. Currency preferences no longer relabel stored balances.
+
+## Validation and remaining integration checks
 
 ```sh
-npm install
-npm run start
+npm run typecheck
+npm run lint
+npm run test:api
 ```
 
-Other commands:
+`docs/backend-openapi.json` is a snapshot from the local backend's `/api/docs-json`.
+Its request schemas were checked against this integration, but it does not specify
+response schemas. Resource responses currently use the existing frontend types;
+quote responses expect numeric `fee` and, for investments, `price`. Two-factor setup
+accepts `secret`, `otpauthUrl`, or `uri`. Verify these with authenticated backend data.
+
+The backend health and OpenAPI endpoints were reachable during integration. No
+account credentials were supplied, so authenticated live flows have not been tested.
+The reset/email-verification, Paystack linking, passkey management, push settings,
+beneficiary management, and order-history screens are connected. The browser
+checks use intercepted API responses and a virtual WebAuthn authenticator; they
+do not replace authenticated testing against the live backend. Native permissions
+and credential providers still need testing on a physical device.
+
+`docs/BACKEND_REQUIREMENTS.md` describes the earlier mock and is historical context,
+not the current frontend implementation. `src/api/seed.ts` is unused fixture data.
+
+## Connected screens
+
+| Screen | Entry point | Backend operations |
+| --- | --- | --- |
+| Reset password | Forgot password or /reset-password?token=... | Reset confirmation |
+| Verify email | Signup, Settings, profile or /verify-email?token=... | Request/resend and confirm |
+| Link card | Payment methods | Paystack initialize and confirm |
+| Passkeys | Security or Settings | Registration options/verify, list/revoke credentials |
+| Confirm action | PIN modal, Use a passkey | Biometric challenge and signed assertion verification |
+| Notifications | Inbox or Settings | Device push registration/removal and alert preferences |
+| Beneficiaries | Transfer, Manage beneficiaries | List, PIN-confirmed add, remove |
+| Investment orders | Invest, View order history | List latest 100 and fetch detail |
+
+Success/error toasts are shared across routes, support dismissal, and announce
+messages to assistive technology. Field validation remains inline. Account adapters
+accept number/accountNumber, keep missing identifiers explicit, and convert decimal
+balance strings before arithmetic; missing account numbers cannot crash the UI.
+
+## Native setup and callbacks
+
+Rebuild the development client after installing the new native dependencies:
 
 ```sh
-npm run typecheck   # tsc --noEmit
-npm run lint        # expo lint
+npm run android
+# On macOS:
+npm run ios
 ```
 
-After changing dependencies, restart Metro with the cache cleared:
+- Set EXPO_PUBLIC_PASSKEY_RP_ID to the backend WebAuthn relying-party hostname.
+  app.config.js adds the iOS webcredentials association. Host the matching
+  apple-app-site-association and Android assetlinks.json files on that domain,
+  using your real Apple team ID and Android signing certificate fingerprints.
+  Allow the web/native origins in the backend's WebAuthn configuration. No domain
+  or signing identity is invented by the app.
+- Configure APNs/FCM credentials for the EAS project to obtain Expo push tokens.
+  Push settings requests OS permission before registration and persists the
+  returned registration ID per account so it can be removed. Backend
+  deliveryEnabled=false is displayed as registered but not sending.
+- Configure email links to the frontend /reset-password and /verify-email routes,
+  with a token query parameter, or use inveto://reset-password and
+  inveto://verify-email on mobile. Native aliases for the auth confirmation paths
+  are handled in +native-intent.tsx. Tokens can also be pasted into those screens.
+- Configure the Paystack return URL to /card-link (web) or inveto://card-link
+  (mobile). The backend controls this URL; initialize accepts no client callback
+  field. The checkout reference is saved per user. A callback is never treated as
+  proof of payment: the user verifies it against /cards/link/confirm. A mismatched
+  callback reference cannot confirm a different checkout. Only HTTPS Paystack
+  checkout URLs are opened. The endpoint reference specifies Paystack test mode.
 
-```sh
-npx expo start --clear
-```
+Expected response shapes for these flows: biometric options are
+{ challengeToken, options }; push registration is { id, deliveryEnabled };
+Paystack initialize is { reference, authorizationUrl } (authorization_url is also
+accepted). The OpenAPI snapshot currently omits response schemas, so verify these
+shapes against your backend deployment.
 
-## Swapping in a real backend
-
-`src/api/client.ts` is the only module that touches data. Its read and write
-helpers resolve against an in-memory object hydrated from AsyncStorage, and
-`subscribe` notifies screens to refetch. Replace those two helpers with real
-requests; the signature of every endpoint in `api` stays the same, so screens
-and hooks need no changes. The mock delays 180–400ms per call, so loading and
-error states are already exercised.
-
-## Currency
-
-Amounts are not hardcoded to a single country. Each account, transaction, and
-product carries its own `CurrencyCode`, and the whole app falls back to
-`DEFAULT_CURRENCY` (USD) before the database hydrates. Users can switch the
-display currency in Settings, which re-denominates the seeded balances so the
-UI stays internally consistent.
-
-The symbol map lives in `src/lib/currency.ts`. Adding a currency is one entry
-there plus one line in the `CurrencyCode` union in `src/types/index.ts`. This is
-a display setting, not FX conversion — a real backend would do the conversion
-and persist a home currency per user.
-
-## Notes
-
-- The floating blue gear is an Expo development-client control, not app UI.
-- Card numbers are never stored: only brand, last four digits, expiry, and a
-  nickname are kept.
-- Mock data lives under the `inveto.db.v2` key. Bump `DB_KEY` in
-  `src/api/client.ts` whenever the seed shape changes, so existing installs
-  discard stale data instead of merging it.
-- `npm audit` still reports transitive advisories from the Expo toolchain. They
-  are not reachable from app code but are worth clearing before release.
+References: [Expo notifications](https://docs.expo.dev/versions/latest/sdk/notifications/),
+[native passkey setup](https://github.com/f-23/react-native-passkey#configuration),
+[Expo browser](https://docs.expo.dev/versions/latest/sdk/webbrowser/).

@@ -1,6 +1,7 @@
+import { toast } from "@/src/components/Toast";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { ApiError, api } from "@/src/api/client";
@@ -15,6 +16,7 @@ import {
   Screen,
   SectionHeader,
   Skeleton,
+  Stack,
 } from "@/src/components/ui";
 import { useApi } from "@/src/hooks/useApi";
 import { formatMoney, formatPercent } from "@/src/lib/format";
@@ -47,9 +49,12 @@ export default function ProductDetail() {
   const [done, setDone] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
+  const [retrying, setRetrying] = useState(false);
+  const pending = useRef<{ body: Parameters<typeof api.investing.placeOrder>[0]; key: string } | null>(null);
+
   if (loading && !product) {
     return (
-      <Screen>
+      <Screen gap={22}>
         <HeaderBar title="Product" onBack={() => router.back()} />
         <Card style={{ padding: 20, gap: 12 }}>
           <Skeleton height={18} width="40%" />
@@ -62,7 +67,7 @@ export default function ProductDetail() {
 
   if (error || !product) {
     return (
-      <Screen>
+      <Screen gap={22}>
         <HeaderBar title="Product" onBack={() => router.back()} />
         <ErrorState message={error ?? "Product not found"} onRetry={reload} />
       </Screen>
@@ -84,44 +89,35 @@ export default function ProductDetail() {
     units > 0 && (side === "buy" ? true : units <= ownedUnits) && !busy && !done;
 
   const submit = async () => {
+    if (busy) return;
     setFailure(null);
-
-    const verb = side === "buy" ? "buy" : "sell";
-    const stepUpToken = await confirmStepUp(
-      `Confirm ${verb} ${units} ${product.ticker} for ${formatMoney(
-        side === "buy" ? gross + fee : gross - fee,
-        product.currency,
-      )}.`,
-    );
-    if (!stepUpToken) {
-      setFailure("Order cancelled. Your PIN is required to trade.");
-      return;
-    }
-
     setBusy(true);
     try {
-      await api.investing.placeOrder({
-        productId: product.id,
-        side,
-        units,
-        price: product.price,
-        fee,
-        stepUpToken,
-      });
-      setDone(
-        `${side === "buy" ? "Bought" : "Sold"} ${units} ${product.ticker} for ${formatMoney(gross, product.currency)}`,
-      );
+      if (!pending.current) {
+        const quote = await api.investing.quote(product.id, side, units);
+        if (![quote.price, quote.fee].every(Number.isFinite)) throw new ApiError("invalid_response", "The server did not return a valid order quote.");
+        const stepUpToken = await confirmStepUp("investment_order", `Confirm ${side} ${units} ${product.ticker} at ${formatMoney(quote.price, product.currency)} per unit, with a fee of ${formatMoney(quote.fee, product.currency)}.`);
+        if (!stepUpToken) return;
+        pending.current = { body: { productId: product.id, side, units, price: quote.price, fee: quote.fee, stepUpToken }, key: `order-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      }
+      const order = await api.investing.placeOrder(pending.current.body, pending.current.key);
+      pending.current = null;
+      toast.success("Order submitted.");
+      setDone(`Order ${order.status}: ${order.units} units for ${formatMoney(order.total, product.currency)}`);
       setRawUnits("");
     } catch (err) {
-      setFailure(err instanceof ApiError ? err.message : "Order failed");
+      toast.error(err instanceof Error ? err.message : "Order failed.");
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500 && ![408, 409, 429].includes(err.status)) pending.current = null;
+      setFailure(pending.current ? "The order outcome is uncertain. Retry the original order here before starting another." : err instanceof ApiError ? err.message : "Order failed");
     } finally {
+      setRetrying(pending.current !== null);
       setBusy(false);
     }
   };
 
   if (done) {
     return (
-      <Screen>
+      <Screen gap={22}>
         <HeaderBar title="Order" onBack={() => router.back()} />
         <Card style={{ padding: 24, alignItems: "center", gap: 12 }}>
           <View style={[styles.tick, { backgroundColor: colors.accentSoft }]}>
@@ -153,7 +149,7 @@ export default function ProductDetail() {
   }
 
   return (
-    <Screen>
+    <Screen gap={22}>
       <HeaderBar title={product.ticker} onBack={() => router.back()} />
 
       <View style={{ alignItems: "center", gap: 6, paddingVertical: 8 }}>
@@ -176,29 +172,27 @@ export default function ProductDetail() {
             {formatPercent(change)} ({formatPercent(changePercent)})
           </Text>
         </View>
-        <Text style={{ color: colors.textSubtle, fontSize: 12 }}>
+        <Text style={{ color: colors.textSubtle, fontSize: 13 }}>
           Previous close {formatMoney(product.previousClose, product.currency)}
         </Text>
       </View>
 
-      <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
-        <Card style={{ flex: 1, padding: 14, gap: 4 }}>
-          <Text style={{ color: colors.textSubtle, fontSize: 11 }}>Yield</Text>
-          <Text style={{ color: colors.text, fontSize: 14, fontWeight: "700" }}>
+      <View style={styles.statRow}>
+        <Card style={styles.stat}>
+          <Text style={{ color: colors.textSubtle, fontSize: 12 }}>Yield</Text>
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>
             {product.yieldPercent.toFixed(1)}%
           </Text>
         </Card>
-        <Card style={{ flex: 1, padding: 14, gap: 4 }}>
-          <Text style={{ color: colors.textSubtle, fontSize: 11 }}>You hold</Text>
-          <Text style={{ color: colors.text, fontSize: 14, fontWeight: "700" }}>
+        <Card style={styles.stat}>
+          <Text style={{ color: colors.textSubtle, fontSize: 12 }}>You hold</Text>
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>
             {ownedUnits.toFixed(2)} {product.ticker}
           </Text>
         </Card>
       </View>
 
-      <View style={{ height: 20 }} />
-
-      <Card style={{ padding: 16, gap: 12 }}>
+      <Card style={{ padding: 18, gap: 14 }}>
         <Row
           title={product.name}
           subtitle={`${ASSET_LABEL[product.assetClass]} · ${product.currency}`}
@@ -210,15 +204,11 @@ export default function ProductDetail() {
         </Text>
       </Card>
 
-      <View style={{ height: 20 }} />
-
       <View
-        style={{
-          flexDirection: "row",
-          padding: 4,
-          borderRadius: radii.md,
-          backgroundColor: colors.surfaceSunken,
-        }}
+        style={[
+          styles.sideSwitch,
+          { borderRadius: radii.md, backgroundColor: colors.surfaceSunken },
+        ]}
       >
         {(["buy", "sell"] as const).map((option) => {
           const active = side === option;
@@ -232,13 +222,13 @@ export default function ProductDetail() {
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
               accessibilityLabel={option === "buy" ? "Buy" : "Sell"}
-              style={{
-                flex: 1,
-                alignItems: "center",
-                paddingVertical: 10,
-                borderRadius: radii.sm,
-                backgroundColor: active ? colors.surface : "transparent",
-              }}
+              style={[
+                styles.sideOption,
+                {
+                  borderRadius: radii.sm,
+                  backgroundColor: active ? colors.surface : "transparent",
+                },
+              ]}
             >
               <Text
                 style={{
@@ -247,7 +237,7 @@ export default function ProductDetail() {
                       ? colors.accent
                       : colors.danger
                     : colors.textSubtle,
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: "700",
                 }}
               >
@@ -258,24 +248,16 @@ export default function ProductDetail() {
         })}
       </View>
 
-      {failure ? (
-        <View style={{ marginTop: 14 }}>
-          <Banner tone="danger" message={failure} />
-        </View>
-      ) : null}
+      {failure ? <Banner tone="danger" message={failure} /> : null}
 
       {side === "sell" && ownedUnits === 0 ? (
-        <View style={{ marginTop: 14 }}>
-          <Banner
-            tone="warning"
-            message={`You do not hold any ${product.ticker} yet, so there is nothing to sell.`}
-          />
-        </View>
+        <Banner
+          tone="warning"
+          message={`You do not hold any ${product.ticker} yet, so there is nothing to sell.`}
+        />
       ) : null}
 
-      <View style={{ height: 14 }} />
-
-      <Card style={{ padding: 18, gap: 12 }}>
+      <Card style={{ padding: 20, gap: 16 }}>
         <SectionHeader title="Units" />
         <TextInput
           value={rawUnits}
@@ -284,25 +266,23 @@ export default function ProductDetail() {
           placeholder="0.00"
           placeholderTextColor={colors.textSubtle}
           accessibilityLabel="Number of units"
-          style={{
-            color: colors.text,
-            fontSize: 26,
-            fontWeight: "800",
-            minHeight: 48,
-            borderRadius: radii.md,
-            borderWidth: 1,
-            borderColor: colors.border,
-            paddingHorizontal: 14,
-          }}
+          style={[
+            styles.unitsInput,
+            {
+              borderRadius: radii.md,
+              borderColor: colors.border,
+              color: colors.text,
+            },
+          ]}
         />
 
         {units > 0 ? (
-          <View style={{ gap: 6 }}>
+          <Stack gap={10}>
             <Line
               label={`${side === "buy" ? "Cost" : "Proceeds"}`}
               value={formatMoney(gross, product.currency)}
             />
-            <Line label="Fee" value={formatMoney(fee, product.currency)} />
+            <Line label="Estimated fee" value={formatMoney(fee, product.currency)} />
             <Line
               label={side === "buy" ? "Total debit" : "Net credit"}
               value={formatMoney(
@@ -311,10 +291,10 @@ export default function ProductDetail() {
               )}
               strong
             />
-          </View>
+          </Stack>
         ) : null}
 
-        <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={styles.presets}>
           {[1, 5, 10, 25].map((preset) => (
             <Pressable
               key={preset}
@@ -329,16 +309,16 @@ export default function ProductDetail() {
               }
               accessibilityRole="button"
               accessibilityLabel={`${preset} units`}
-              style={{
-                flex: 1,
-                alignItems: "center",
-                paddingVertical: 8,
-                borderRadius: radii.sm,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
+              style={({ pressed }) => [
+                styles.preset,
+                {
+                  borderRadius: radii.md,
+                  borderColor: colors.border,
+                  backgroundColor: pressed ? colors.surfaceRaised : "transparent",
+                },
+              ]}
             >
-              <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "700" }}>
+              <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: "700" }}>
                 {preset}
               </Text>
             </Pressable>
@@ -346,13 +326,11 @@ export default function ProductDetail() {
         </View>
       </Card>
 
-      <View style={{ height: 18 }} />
-
       <Button
-        label={side === "buy" ? "Place buy order" : "Place sell order"}
+        label={retrying ? "Retry original order" : side === "buy" ? "Place buy order" : "Place sell order"}
         size="lg"
         loading={busy}
-        disabled={!canSubmit}
+        disabled={retrying ? busy : !canSubmit}
         onPress={submit}
       />
 
@@ -365,8 +343,7 @@ export default function ProductDetail() {
           marginTop: 14,
         }}
       >
-        Demo build — orders settle instantly against the seeded price and are
-        stored locally.
+        Final prices and fees are confirmed before you submit.
       </Text>
     </Screen>
   );
@@ -413,6 +390,41 @@ const styles = {
     borderRadius: 29,
     alignItems: "center" as const,
     justifyContent: "center" as const,
+  },
+  statRow: {
+    flexDirection: "row" as const,
+    gap: 12,
+  },
+  stat: {
+    flex: 1,
+    padding: 18,
+    gap: 5,
+  },
+  sideSwitch: {
+    flexDirection: "row" as const,
+    padding: 5,
+  },
+  sideOption: {
+    flex: 1,
+    alignItems: "center" as const,
+    paddingVertical: 13,
+  },
+  unitsInput: {
+    fontSize: 26,
+    fontWeight: "800" as const,
+    minHeight: 60,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+  },
+  presets: {
+    flexDirection: "row" as const,
+    gap: 10,
+  },
+  preset: {
+    flex: 1,
+    alignItems: "center" as const,
+    paddingVertical: 13,
+    borderWidth: 1,
   },
   line: {
     flexDirection: "row" as const,

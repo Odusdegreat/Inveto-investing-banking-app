@@ -43,3 +43,7 @@ app-example
 /android
 
 .vercel
+
+.env
+.env.*
+!.env.example

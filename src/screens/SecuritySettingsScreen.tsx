@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as LocalAuthentication from "expo-local-authentication";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Alert, Pressable, Switch, Text, TextInput, View } from "react-native";
 
+import { Field } from "@/src/components/AuthShell";
+import { toast } from "@/src/components/Toast";
 import { ApiError, api } from "@/src/api/client";
 import {
   Banner,
@@ -13,10 +14,13 @@ import {
   Divider,
   ErrorState,
   HeaderBar,
+  ListCard,
   Row,
   Screen,
   SectionHeader,
   Skeleton,
+  Stack,
+  rowTextInset,
 } from "@/src/components/ui";
 import { useApi } from "@/src/hooks/useApi";
 import { formatRelative } from "@/src/lib/format";
@@ -31,6 +35,40 @@ export default function SecuritySettingsScreen() {
   const security = useApi(() => api.security.get(), []);
   const devices = useApi(() => api.security.devices(), []);
 
+  const [twoFactor, setTwoFactor] = useState<boolean | null>(null);
+  const [twoFactorPassword, setTwoFactorPassword] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [enrollment, setEnrollment] = useState<string | null>(null);
+  const submitTwoFactor = async () => {
+    if (busy || twoFactor === null) return;
+    setBusy(true);
+    setFailure(null);
+    try {
+      if (twoFactor && !enrollment) {
+        const stepUpToken = security.data?.pinSet ? await confirmStepUp("two_factor_setup", "Confirm setting up two-factor authentication.") : undefined;
+        if (stepUpToken === null) return;
+        const result = await api.auth.enrollTwoFactor(twoFactorPassword, stepUpToken);
+        const setup = result.secret ?? result.otpauthUrl ?? result.uri;
+        if (!setup) throw new ApiError("invalid_response", "The server did not return authenticator setup details.");
+        setEnrollment(setup);
+        return;
+      }
+      if (twoFactor) await api.auth.confirmTwoFactor(twoFactorCode);
+      else {
+        const token = await confirmStepUp("security_downgrade", "Confirm turning off two-factor authentication.");
+        if (!token) return;
+        await api.auth.disableTwoFactor(twoFactorPassword, twoFactorCode, token);
+      }
+      toast.success("Two-factor authentication updated.");
+      setTwoFactor(null);
+      setTwoFactorPassword("");
+      setTwoFactorCode("");
+      setEnrollment(null);
+      await security.reload();
+      toast.success("Security settings saved.");
+    } catch (err) { setFailure(err instanceof Error ? err.message : "Could not update two-factor authentication"); }
+    finally { setBusy(false); }
+  };
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -41,32 +79,23 @@ export default function SecuritySettingsScreen() {
     value: boolean,
   ) => {
     setFailure(null);
-    if (key === "biometricsEnabled" && value) {
-      const supported = await LocalAuthentication.hasHardwareAsync().catch(
-        () => false,
-      );
-      if (!supported) {
-        setFailure("This device does not support biometric unlock");
-        return;
-      }
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Confirm it is you",
-      }).catch(() => ({ success: false }));
-      if (!result.success) {
-        setFailure("Biometric check was cancelled");
-        return;
-      }
+    if (key === "twoFactorEnabled") {
+      setTwoFactor(value);
+      setEnrollment(null);
+      setTwoFactorPassword("");
+      setTwoFactorCode("");
+      return;
     }
-
+    if (value) {
+      router.push("/biometrics");
+      return;
+    }
     // Turning a control OFF is a downgrade, so it needs the transaction PIN.
     // Turning one ON is allowed without it.
     let stepUpToken: string | undefined;
     if (!value) {
-      const label =
-        key === "twoFactorEnabled"
-          ? "two-factor authentication"
-          : "biometric unlock";
-      const token = await confirmStepUp(
+      const label = "biometric unlock";
+      const token = await confirmStepUp("security_downgrade",
         `Confirm turning off ${label}.`,
       );
       if (!token) {
@@ -98,14 +127,23 @@ export default function SecuritySettingsScreen() {
   }
 
   return (
-    <Screen>
+    <Screen gap={22}>
       <HeaderBar title="Security" onBack={() => router.back()} />
 
+      {twoFactor !== null ? <Card style={{ padding: 20, gap: 18 }}>
+        <SectionHeader title={twoFactor ? "Set up two-factor authentication" : "Turn off two-factor authentication"} />
+        <Field label="Current password" value={twoFactorPassword} onChangeText={setTwoFactorPassword} secureTextEntry autoComplete="current-password" />
+        {enrollment ? <Text selectable style={{ color: colors.text, fontSize: 13, lineHeight: 19 }}>Add this setup value to your authenticator, then enter its code: {enrollment}</Text> : null}
+        {(!twoFactor || enrollment) ? <Field label="Authenticator code" value={twoFactorCode} onChangeText={setTwoFactorCode} keyboardType="number-pad" /> : null}
+        <Button label={twoFactor && !enrollment ? "Get setup details" : "Confirm"} loading={busy} onPress={submitTwoFactor} />
+        <Button label="Cancel" variant="ghost" disabled={busy} onPress={() => { setTwoFactor(null); setEnrollment(null); setTwoFactorPassword(""); setTwoFactorCode(""); }} />
+      </Card> : null}
       {failure ? <Banner tone="danger" message={failure} /> : null}
       {success ? <Banner tone="success" message={success} /> : null}
 
       {panel === "pin" ? (
         <PinPanel
+          pinSet={security.data?.pinSet ?? false}
           onDone={async (message) => {
             setPanel(null);
             setSuccess(message);
@@ -131,9 +169,9 @@ export default function SecuritySettingsScreen() {
       ) : null}
 
       {panel === null ? (
-        <>
+        <Stack gap={22}>
           <SectionHeader title="Access" />
-          <Card style={{ paddingVertical: 4 }}>
+          <ListCard>
             <Row
               title="Transaction PIN"
               subtitle="Required for payments and PIN unlock"
@@ -141,7 +179,7 @@ export default function SecuritySettingsScreen() {
               chevron
               onPress={() => setPanel("pin")}
             />
-            <Divider inset={52} />
+            <Divider inset={rowTextInset(20)} />
             <Row
               title="Change password"
               subtitle="Last updated recently"
@@ -149,10 +187,10 @@ export default function SecuritySettingsScreen() {
               chevron
               onPress={() => setPanel("password")}
             />
-            <Divider inset={52} />
+            <Divider inset={rowTextInset(20)} />
             <Row
-              title="Biometric unlock"
-              subtitle="Face or fingerprint on this device"
+              title="Passkey confirmation"
+              subtitle="Approve actions with your device"
               icon="finger-print-outline"
               right={
                 <Switch
@@ -165,7 +203,7 @@ export default function SecuritySettingsScreen() {
                 />
               }
             />
-            <Divider inset={52} />
+            <Divider inset={rowTextInset(20)} />
             <Row
               title="Two-factor authentication"
               subtitle="Require a code for new devices"
@@ -181,18 +219,26 @@ export default function SecuritySettingsScreen() {
                 />
               }
             />
-          </Card>
+          </ListCard>
 
-          <View style={{ height: 24 }} />
+          <ListCard>
+            <Row
+              title="Manage passkeys"
+              subtitle="Register or remove a device credential"
+              icon="key-outline"
+              chevron
+              onPress={() => router.push("/biometrics")}
+            />
+          </ListCard>
 
           <SectionHeader title="Signed-in devices" />
           {devices.loading && !devices.data ? (
-            <Card style={{ padding: 16, gap: 12 }}>
+            <Card style={{ padding: 20, gap: 16 }}>
               <Skeleton height={40} />
               <Skeleton height={40} width="70%" />
             </Card>
           ) : (
-            <Card style={{ paddingVertical: 4 }}>
+            <ListCard>
               {(devices.data ?? []).map((device, index) => (
                 <View key={device.id}>
                   <Row
@@ -236,7 +282,7 @@ export default function SecuritySettingsScreen() {
                                 {
                                   text: "Sign out",
                                   style: "destructive",
-                                  onPress: () => void api.security.revokeDevice(device.id),
+                                  onPress: () => { void api.security.revokeDevice(device.id).then(() => toast.success("Device signed out.")).catch((error) => toast.error(error instanceof Error ? error.message : "Could not sign out this device.")); },
                                 },
                               ],
                             )
@@ -255,38 +301,40 @@ export default function SecuritySettingsScreen() {
                     }
                   />
                   {index < (devices.data?.length ?? 0) - 1 ? (
-                    <Divider inset={52} />
+                    <Divider inset={rowTextInset(20)} />
                   ) : null}
                 </View>
               ))}
-            </Card>
+            </ListCard>
           )}
 
           {security.data ? (
-            <Card style={{ padding: 16, marginTop: 16, gap: 8 }}>
-              <Text style={{ color: colors.text, fontSize: 14, fontWeight: "700" }}>
+            <Card style={{ padding: 20, gap: 10 }}>
+              <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>
                 {security.data.twoFactorEnabled ? "Well protected" : "Add 2FA"}
               </Text>
-              <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 20 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 22 }}>
                 {security.data.twoFactorEnabled
                   ? "Two-factor authentication is on. A code is required when signing in on a new device."
                   : "Without 2FA, only your password protects your account if it is compromised."}
               </Text>
             </Card>
           ) : null}
-        </>
+        </Stack>
       ) : null}
     </Screen>
   );
 }
 
 function PinPanel({
+  pinSet,
   onDone,
   onCancel,
   onError,
   busy,
   setBusy,
 }: {
+  pinSet: boolean;
   onDone: (message: string) => Promise<void>;
   onCancel: () => void;
   onError: (message: string | null) => void;
@@ -296,6 +344,7 @@ function PinPanel({
   const { colors, radii } = useTheme();
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [password, setPassword] = useState("");
 
   const valid =
     next.length === 4 && /^\d{4}$/.test(next) && next === confirm && next !== "1234";
@@ -303,20 +352,18 @@ function PinPanel({
   const submit = async () => {
     onError(null);
 
-    // The confirm screen collects the CURRENT PIN, which doubles as proof of
-    // identity for changing the PIN itself.
-    const stepUpToken = await confirmStepUp(
-      "Enter your current transaction PIN to change it.",
-    );
-    if (!stepUpToken) {
-      onError("Cancelled. Your current PIN is required to change it.");
-      return;
-    }
-
     setBusy(true);
     try {
-      await api.auth.setPin(next, stepUpToken);
+      if (pinSet) {
+        const stepUpToken = await confirmStepUp("pin_change", "Enter your current transaction PIN to change it.");
+        if (!stepUpToken) return;
+        await api.auth.setPin(next, stepUpToken);
+      } else {
+        const { setupToken } = await api.auth.setupPin(password);
+        await api.auth.setPin(next, undefined, setupToken);
+      }
       await onDone("Transaction PIN updated");
+      toast.success("Transaction PIN updated.");
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Could not update PIN");
     } finally {
@@ -325,9 +372,10 @@ function PinPanel({
   };
 
   return (
-    <Card style={{ padding: 18, gap: 14 }}>
+    <Card style={{ padding: 18, gap: 18 }}>
       <SectionHeader title="New transaction PIN" />
-      <Text style={{ color: colors.textSubtle, fontSize: 12 }}>
+      {!pinSet ? <Field label="Current password" value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" /> : null}
+      <Text style={{ color: colors.textSubtle, fontSize: 12, lineHeight: 17 }}>
         Four digits, and not something guessable.
       </Text>
 
@@ -375,7 +423,6 @@ function PasswordPanel({
   busy: boolean;
   setBusy: (value: boolean) => void;
 }) {
-  const { colors, radii } = useTheme();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
 
@@ -384,7 +431,7 @@ function PasswordPanel({
   const submit = async () => {
     onError(null);
 
-    const stepUpToken = await confirmStepUp(
+    const stepUpToken = await confirmStepUp("password_change",
       "Confirm your transaction PIN to change your password.",
     );
     if (!stepUpToken) {
@@ -396,6 +443,7 @@ function PasswordPanel({
     try {
       await api.auth.changePassword(current, next, stepUpToken);
       await onDone("Password updated");
+      toast.success("Password updated.");
     } catch (err) {
       onError(
         err instanceof ApiError ? err.message : "Could not change password",
@@ -406,27 +454,24 @@ function PasswordPanel({
   };
 
   return (
-    <Card style={{ padding: 18, gap: 14 }}>
+    <Card style={{ padding: 18, gap: 18 }}>
       <SectionHeader title="Change password" />
-      <TextInput
+      <Field
+        label="Current password"
         value={current}
         onChangeText={setCurrent}
         secureTextEntry
-        placeholder="Current password"
-        placeholderTextColor={colors.textSubtle}
-        accessibilityLabel="Current password"
-        style={pinInput(colors, radii)}
+        autoComplete="current-password"
       />
-      <TextInput
+      <Field
+        label="New password"
         value={next}
         onChangeText={setNext}
         secureTextEntry
-        placeholder="New password"
-        placeholderTextColor={colors.textSubtle}
-        accessibilityLabel="New password"
-        style={pinInput(colors, radii)}
+        autoComplete="new-password"
+        hint="At least 8 characters, including a letter and a number."
       />
-      <Button label="Update password" onPress={submit} loading={busy} disabled={!valid} />
+      <Button label="Update password" size="lg" onPress={submit} loading={busy} disabled={!valid} />
       <Button label="Cancel" variant="ghost" onPress={onCancel} />
     </Card>
   );
@@ -437,13 +482,13 @@ function pinInput(
   radii: ReturnType<typeof useTheme>["radii"],
 ) {
   return {
-    minHeight: 50,
+    minHeight: 56,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceSunken,
     color: colors.text,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     fontSize: 18,
     letterSpacing: 6,
   } as const;

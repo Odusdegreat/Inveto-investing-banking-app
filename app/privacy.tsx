@@ -1,8 +1,8 @@
 import { useRouter } from "expo-router";
 import React from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 
-import { Card, HeaderBar, Screen, SectionHeader } from "@/src/components/ui";
+import { Card, HeaderBar, Screen, Section } from "@/src/components/ui";
 import { useTheme } from "@/src/theme/ThemeProvider";
 
 const SECTIONS: { title: string; body: string }[] = [
@@ -29,25 +29,22 @@ export default function Privacy() {
   const { colors } = useTheme();
 
   return (
-    <Screen>
+    <Screen gap={22}>
       <HeaderBar title="Privacy" onBack={() => router.back()} />
 
-      <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 21 }}>
+      <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 22 }}>
         INVETO is a demonstration build. This policy describes how the product is
         designed to handle your data.
       </Text>
 
-      <View style={{ height: 20 }} />
-
       {SECTIONS.map((section) => (
-        <View key={section.title} style={{ marginBottom: 20 }}>
-          <SectionHeader title={section.title} />
-          <Card style={{ padding: 16 }}>
-            <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 21 }}>
+        <Section key={section.title} title={section.title} gap={12}>
+          <Card style={{ padding: 20 }}>
+            <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 23 }}>
               {section.body}
             </Text>
           </Card>
-        </View>
+        </Section>
       ))}
     </Screen>
   );

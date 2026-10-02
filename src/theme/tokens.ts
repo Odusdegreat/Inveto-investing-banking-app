@@ -68,6 +68,7 @@ export type ThemeColors = {
   dangerSoft: string;
   success: string;
   warning: string;
+  warningText: string;
   warningSoft: string;
   overlay: string;
   tabBar: string;
@@ -92,6 +93,7 @@ export const darkColors: ThemeColors = {
   dangerSoft: "rgba(239,68,68,0.12)",
   success: palette.green500,
   warning: palette.amber400,
+  warningText: palette.navy900,
   warningSoft: "rgba(245,158,11,0.12)",
   overlay: "rgba(0,0,0,0.6)",
   tabBar: "rgba(255,255,255,0.07)",
@@ -110,12 +112,13 @@ export const lightColors: ThemeColors = {
   textSubtle: palette.navy500,
   accent: palette.green600,
   accentPressed: palette.green700,
-  accentSoft: palette.green950,
+  accentSoft: "rgba(22,163,74,0.12)",
   accentBorder: palette.green600,
   danger: palette.red600,
   dangerSoft: "rgba(220,38,38,0.10)",
   success: palette.green600,
   warning: palette.amber500,
+  warningText: palette.navy900,
   warningSoft: "rgba(245,158,11,0.14)",
   overlay: "rgba(15,23,42,0.45)",
   tabBar: "rgba(15,23,42,0.05)",

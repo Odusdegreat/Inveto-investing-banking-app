@@ -1,16 +1,17 @@
 {
   "expo": {
-    "name": "Inveto",
-    "slug": "inveto",
+    "name": "Inveto Demo - Banking Simulator",
+    "slug": "inveto-demo",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "inveto",
+    "scheme": "inveto-demo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.inveto.app"
+      "bundleIdentifier": "com.inveto.demo",
+      "category": "education"
     },
     "android": {
       "versionCode": 2,
@@ -21,12 +22,13 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.inveto.app",
+      "package": "com.inveto.demo",
+      "category": "education",
       "intentFilters": [
         {
           "action": "VIEW",
           "autoVerify": false,
-          "data": [{ "scheme": "inveto" }],
+          "data": [{ "scheme": "inveto-demo" }],
           "category": ["BROWSABLE", "DEFAULT"]
         }
       ]

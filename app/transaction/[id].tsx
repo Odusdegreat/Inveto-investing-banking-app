@@ -1,17 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Pressable, Share, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 
 import { api } from "@/src/api/client";
 import { TransactionIcon } from "@/src/components/marks";
 import {
   Card,
   Chip,
+  DetailRow,
   ErrorState,
   HeaderBar,
   Screen,
-  SectionHeader,
+  Section,
   Skeleton,
 } from "@/src/components/ui";
 import { useApi } from "@/src/hooks/useApi";
@@ -23,6 +24,7 @@ import {
   formatTime,
 } from "@/src/lib/format";
 import { useTheme } from "@/src/theme/ThemeProvider";
+import { downloadAndShareReceipt } from "@/src/lib/pdf";
 
 const STATUS_TONE = {
   completed: "success",
@@ -43,12 +45,12 @@ export default function TransactionDetail() {
 
   if (loading) {
     return (
-      <Screen>
+      <Screen gap={22}>
         <HeaderBar title="Transaction" onBack={() => router.back()} />
-        <Card style={{ padding: 20, gap: 14 }}>
+        <Card style={{ padding: 20, gap: 16 }}>
           <Skeleton height={20} width="60%" />
           <Skeleton height={40} />
-          <Skeleton height={14} />
+          <Skeleton height={16} width="80%" />
         </Card>
       </Screen>
     );
@@ -56,26 +58,15 @@ export default function TransactionDetail() {
 
   if (error || !data) {
     return (
-      <Screen>
+      <Screen gap={22}>
         <HeaderBar title="Transaction" onBack={() => router.back()} />
         <ErrorState message={error ?? "Not found"} onRetry={reload} />
       </Screen>
     );
   }
 
-  const shareReceipt = async () => {
-    await Share.share({
-      title: "INVETO receipt",
-      message: [
-        "INVETO receipt",
-        `Reference: ${data.reference}`,
-        `Amount: ${formatMoney(data.amount, data.currency, { sign: true })}`,
-        `Description: ${data.title}`,
-        `Category: ${CATEGORY_LABEL[data.category]}`,
-        `Date: ${formatDate(data.createdAt)} ${formatTime(data.createdAt)}`,
-        `Status: ${STATUS_LABEL[data.status]}`,
-      ].join("\n"),
-    }).catch(() => undefined);
+  const downloadReceipt = async () => {
+    await downloadAndShareReceipt(data, undefined, true);
   };
 
   const report = () => {
@@ -107,18 +98,18 @@ export default function TransactionDetail() {
   const incoming = data.amount > 0;
 
   return (
-    <Screen>
+    <Screen gap={22}>
       <HeaderBar title="Transaction" onBack={() => router.back()} />
 
-      <View style={{ alignItems: "center", gap: 10, paddingVertical: 12 }}>
-        <TransactionIcon kind={data.kind} category={data.category} size={64} />
-        <Text style={{ color: colors.textMuted, fontSize: 14 }}>
+      <View style={{ alignItems: "center", gap: 10, paddingVertical: 10 }}>
+        <TransactionIcon kind={data.kind} category={data.category} amount={data.amount} size={68} />
+        <Text style={{ color: colors.textMuted, fontSize: 15, textAlign: "center" }}>
           {data.title}
         </Text>
         <Text
           style={{
             color: incoming ? colors.accent : colors.text,
-            fontSize: 34,
+            fontSize: 36,
             fontWeight: "800",
           }}
         >
@@ -130,23 +121,27 @@ export default function TransactionDetail() {
         />
       </View>
 
-      <Card style={{ padding: 18, marginTop: 20 }}>
-        <SectionHeader title="Details" />
-        <Detail label="Category" value={CATEGORY_LABEL[data.category]} />
-        <Detail label="Type" value={capitalise(data.kind)} />
-        <Detail label="Date" value={formatDate(data.createdAt)} />
-        <Detail label="Time" value={formatTime(data.createdAt)} />
-        {data.cardLast4 ? (
-          <Detail label="Paid with" value={`•••• ${data.cardLast4}`} />
-        ) : null}
-        {data.counterparty ? (
-          <Detail label="Counterparty" value={data.counterparty} />
-        ) : null}
-        <Detail label="Reference" value={data.reference} mono />
-        {data.description ? (
-          <Detail label="Note" value={data.description} />
-        ) : null}
-      </Card>
+      <Section title="Details" gap={12}>
+        <Card style={{ padding: 20, gap: 2 }}>
+          <DetailRow
+            label="Category"
+            value={CATEGORY_LABEL[data.category]}
+          />
+          <DetailRow label="Type" value={capitalise(data.kind)} />
+          <DetailRow label="Date" value={formatDate(data.createdAt)} />
+          <DetailRow label="Time" value={formatTime(data.createdAt)} />
+          {data.cardLast4 ? (
+            <DetailRow label="Paid with" value={`•••• ${data.cardLast4}`} />
+          ) : null}
+          {data.counterparty ? (
+            <DetailRow label="Counterparty" value={data.counterparty} />
+          ) : null}
+          <DetailRow label="Reference" value={data.reference} wide />
+          {data.description ? (
+            <DetailRow label="Note" value={data.description} />
+          ) : null}
+        </Card>
+      </Section>
 
       <View
         style={[
@@ -157,7 +152,7 @@ export default function TransactionDetail() {
         <Action
           icon="download-outline"
           label="Download receipt"
-          onPress={shareReceipt}
+          onPress={downloadReceipt}
         />
         <Action
           icon="repeat-outline"
@@ -171,44 +166,14 @@ export default function TransactionDetail() {
         />
       </View>
 
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 20 }}>
-        <Ionicons name="shield-checkmark-outline" size={14} color={colors.textSubtle} />
-        <Text style={{ color: colors.textSubtle, fontSize: 12, flex: 1 }}>
+      <View style={styles.settlement}>
+        <Ionicons name="shield-checkmark-outline" size={16} color={colors.textSubtle} />
+        <Text style={{ color: colors.textSubtle, fontSize: 13, lineHeight: 19, flex: 1 }}>
           Funds settle instantly for transfers and within 3 business days for
           card payments.
         </Text>
       </View>
     </Screen>
-  );
-}
-
-function Detail({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  const { colors } = useTheme();
-  return (
-    <View style={styles.detail}>
-      <Text style={{ color: colors.textSubtle, fontSize: 13 }}>{label}</Text>
-      <Text
-        style={{
-          color: colors.text,
-          fontSize: 14,
-          fontWeight: "600",
-          fontFamily: mono ? "monospace" : undefined,
-          flexShrink: 1,
-          textAlign: "right",
-        }}
-        numberOfLines={1}
-      >
-        {value}
-      </Text>
-    </View>
   );
 }
 
@@ -230,8 +195,15 @@ function Action({
       hitSlop={8}
       style={styles.action}
     >
-      <Ionicons name={icon} size={16} color={colors.textMuted} />
-      <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
+      <Ionicons name={icon} size={18} color={colors.textMuted} />
+      <Text
+        style={{
+          color: colors.textMuted,
+          fontSize: 13,
+          fontWeight: "600",
+          textAlign: "center",
+        }}
+      >
         {label}
       </Text>
     </Pressable>
@@ -243,23 +215,21 @@ function capitalise(value: string) {
 }
 
 const styles = {
-  detail: {
-    flexDirection: "row" as const,
-    justifyContent: "space-between" as const,
-    alignItems: "center" as const,
-    gap: 16,
-    paddingVertical: 9,
-  },
   actions: {
     flexDirection: "row" as const,
     justifyContent: "space-around" as const,
     borderWidth: 1,
-    marginTop: 20,
-    paddingVertical: 14,
+    paddingVertical: 18,
   },
   action: {
     alignItems: "center" as const,
-    gap: 6,
-    paddingHorizontal: 8,
+    gap: 8,
+    paddingHorizontal: 10,
+    flexShrink: 1,
+  },
+  settlement: {
+    flexDirection: "row" as const,
+    alignItems: "flex-start" as const,
+    gap: 10,
   },
 };

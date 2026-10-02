@@ -1,13 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as LocalAuthentication from "expo-local-authentication";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { ApiError, DEMO_PIN, api } from "@/src/api/client";
+import { ApiError, api } from "@/src/api/client";
 import { Banner, Button } from "@/src/components/ui";
-import { cancelStepUp, resolveStepUp } from "@/src/lib/stepUp";
+import { cancelStepUp, resolveStepUp, pendingStepUpAction } from "@/src/lib/stepUp";
 import { useTheme } from "@/src/theme/ThemeProvider";
+
+import { confirmWithPasskey, passkeySupported } from "@/src/lib/passkeys";
+import { useApi } from "@/src/hooks/useApi";
 
 const PIN_LENGTH = 4;
 
@@ -16,27 +18,10 @@ export default function ConfirmPin() {
   const { colors } = useTheme();
   const { reason } = useLocalSearchParams<{ reason?: string }>();
 
+  const security = useApi(() => api.security.get(), []);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [available, setAvailable] = useState<string | null>(null);
-
-  useEffect(() => {
-    LocalAuthentication.supportedAuthenticationTypesAsync()
-      .then((types) => {
-        if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-          setAvailable("Face ID");
-        } else if (
-          types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
-        ) {
-          setAvailable("Touch ID");
-        } else {
-          setAvailable(null);
-        }
-      })
-      .catch(() => setAvailable(null));
-  }, []);
-
   /**
    * If the screen is dismissed without a successful verify — back gesture,
    * header back button, hardware back — the awaiting action must not hang.
@@ -48,7 +33,9 @@ export default function ConfirmPin() {
       setChecking(true);
       setError(null);
       try {
-        const { stepUpToken } = await api.auth.verifyPin(value);
+        const action = pendingStepUpAction();
+        if (!action) throw new ApiError("cancelled", "Start the operation again to confirm it.");
+        const { stepUpToken } = await api.auth.verifyPin(value, action);
         resolveStepUp(stepUpToken);
         router.back();
       } catch (err) {
@@ -73,9 +60,6 @@ export default function ConfirmPin() {
     cancelStepUp();
     router.back();
   };
-
-  const biometricLabel =
-    available === "Face ID" ? "scan-outline" : "finger-print-outline";
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -127,34 +111,7 @@ export default function ConfirmPin() {
         {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
           <Key key={digit} label={digit} onPress={() => press(digit)} />
         ))}
-        {available ? (
-          <Key
-            icon={biometricLabel}
-            label={available}
-            onPress={async () => {
-              const result = await LocalAuthentication.authenticateAsync({
-                promptMessage: "Confirm it is you",
-              }).catch(() => ({ success: false }));
-              if (!result.success) return;
-              setChecking(true);
-              setError(null);
-              try {
-                // Issues its own step-up token. It must not resend the PIN:
-                // that would turn biometrics into a slower way to type it.
-                const { stepUpToken } = await api.auth.verifyBiometric();
-                resolveStepUp(stepUpToken);
-                router.back();
-              } catch (err) {
-                setError(
-                  err instanceof ApiError ? err.message : "Could not confirm it is you",
-                );
-                setChecking(false);
-              }
-            }}
-          />
-        ) : (
-          <Key label="" disabled />
-        )}
+        <Key label="" disabled />
         <Key label="0" onPress={() => press("0")} />
         <Key
           icon="backspace-outline"
@@ -163,10 +120,21 @@ export default function ConfirmPin() {
         />
       </View>
 
-      <Text style={{ color: colors.textSubtle, fontSize: 12 }}>
-        Demo PIN is {DEMO_PIN}
-      </Text>
-
+      {security.data?.biometricsEnabled && passkeySupported() ? <Button label="Use a passkey" variant="secondary" icon="finger-print-outline" loading={checking} onPress={async () => {
+        if (checking) return;
+        const action = pendingStepUpAction();
+        if (!action) return;
+        setChecking(true);
+        setError(null);
+        try {
+          const { stepUpToken } = await confirmWithPasskey(action);
+          resolveStepUp(stepUpToken);
+          router.back();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Passkey confirmation failed");
+          setChecking(false);
+        }
+      }} /> : null}
       <Button label="Cancel" variant="ghost" onPress={dismiss} />
     </View>
   );
